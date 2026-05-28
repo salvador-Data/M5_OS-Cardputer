@@ -159,4 +159,54 @@ void drawBurnerHelp() {
     }
 }
 
+bool promptPassword(char* out, size_t outLen, const char* title) {
+    if (!out || outLen < 2) return false;
+    out[0] = '\0';
+    size_t length = 0;
+
+    while (true) {
+        drawHeader(title);
+        m5os::lcd().setCursor(4, 28);
+        m5os::lcd().setTextColor(TFT_WHITE, TFT_BLACK);
+        m5os::lcd().print("Pass: ");
+        for (size_t i = 0; i < length; ++i) m5os::lcd().print('*');
+        m5os::lcd().setCursor(4, 64);
+        m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
+        m5os::lcd().print("Enter save  ` cancel");
+
+        m5os::update();
+        Buttons keys = m5os::readButtons();
+        if (keys.back) {
+            out[0] = '\0';
+            return false;
+        }
+        if (keys.ok) {
+            out[length] = '\0';
+            return true;
+        }
+
+        if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
+            auto status = M5Cardputer.Keyboard.keysState();
+            for (auto key : status.word) {
+                if (key == '\b' || key == 127) {
+                    if (length > 0) {
+                        length--;
+                        out[length] = '\0';
+                    }
+                    continue;
+                }
+                if (key == '\n' || key == '\r') {
+                    out[length] = '\0';
+                    return true;
+                }
+                if (length < outLen - 1 && key >= 32 && key <= 126) {
+                    out[length++] = static_cast<char>(key);
+                    out[length] = '\0';
+                }
+            }
+        }
+        delay(80);
+    }
+}
+
 }  // namespace m5os::ui

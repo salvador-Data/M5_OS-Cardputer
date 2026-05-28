@@ -128,6 +128,22 @@ Drop offline `.bin` files on SD:
 
 Use **Launch installed app** to flash from SD. To return to M5 OS, reflash this launcher via PlatformIO or M5Burner (menu → **M5Burner / recovery**).
 
+### Security
+
+See **[SECURITY.md](SECURITY.md)** for the full threat model. Summary:
+
+- Manifest and download URLs must be **HTTPS** from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, or `hackerplanet.dev`
+- Optional **`sha256`** per entry — verified on download and before flash (replace placeholders in `data/manifest.example.json` before publishing)
+- SD filenames sanitized — no path traversal under `/firmware/`
+- Wi-Fi passwords entered on keyboard, **never logged** to USB serial
+
+Validate a manifest on your PC:
+
+```bash
+python scripts/validate_manifest.py data/manifest.example.json
+sha256sum ble_bot.bin   # Linux/macOS — paste digest into manifest sha256 field
+```
+
 ---
 
 ## Project layout

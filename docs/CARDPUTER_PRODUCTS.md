@@ -18,6 +18,8 @@ Hacker Planet LLC ships two Philadelphia-assembled Cardputer SKUs (see [PRODUCT_
 
 Build each app in its own repo, copy the `.bin` to SD `/firmware/`, or download via M5 OS **Download from catalog** when Wi-Fi is connected.
 
+Host-side manifest check: `python scripts/validate_manifest.py data/manifest.example.json` — see [SECURITY.md](../SECURITY.md).
+
 ## SD layout
 
 ```text
@@ -39,6 +41,7 @@ Host [`data/manifest.example.json`](data/manifest.example.json) or copy to SD `/
   "version": "1.0.0",
   "url": "https://github.com/salvador-Data/Remote-Possibility/releases/latest/download/firmware.bin",
   "bin": "remote_possibility.bin",
+  "sha256": "<64-char lowercase hex — sha256sum firmware.bin>",
   "description": "CTG field remote status client"
 },
 {
@@ -46,6 +49,7 @@ Host [`data/manifest.example.json`](data/manifest.example.json) or copy to SD `/
   "version": "1.0.0",
   "url": "https://github.com/salvador-Data/BLE-Bot-Cardputer/releases/latest/download/ble_bot.bin",
   "bin": "ble_bot.bin",
+  "sha256": "<64-char lowercase hex — sha256sum ble_bot.bin>",
   "description": "Authorized BLE lab scout"
 }
 ```

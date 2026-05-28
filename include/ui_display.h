@@ -22,6 +22,8 @@ void introSplash();
 void drawHelpOverlay();
 void drawBurnerHelp();
 int selectFromList(const std::vector<String>& items, const char* title, int startIndex = 0);
+/** Keyboard password entry — never logged to serial. Returns false if cancelled. */
+bool promptPassword(char* out, size_t outLen, const char* title);
 Buttons readButtonsExtended();
 
 }  // namespace m5os::ui

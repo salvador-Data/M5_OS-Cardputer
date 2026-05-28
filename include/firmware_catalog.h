@@ -12,6 +12,7 @@ struct FirmwarePackage {
     size_t size = 0;
     String description;
     String binFile;  // SD filename without path, e.g. ble_bot.bin
+    String sha256;   // optional lowercase hex digest
     bool installed = false;
 };
 
@@ -25,6 +26,7 @@ public:
     const std::vector<FirmwarePackage>& installed() const { return installed_; }
     const std::vector<FirmwarePackage>& available() const { return available_; }
     FirmwarePackage* findInstalledByName(const String& name);
+    const FirmwarePackage* findByBinFile(const String& binFile) const;
     String binPathFor(const String& binFile) const;
     static String slugToBinFile(const String& name);
 

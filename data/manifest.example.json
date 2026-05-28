@@ -6,7 +6,8 @@
       "description": "CTG field remote — poll /api/status over Wi-Fi",
       "url": "https://github.com/salvador-Data/Remote-Possibility/releases/latest/download/firmware.bin",
       "bin": "remote_possibility.bin",
-      "size": 0
+      "size": 0,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     },
     {
       "name": "BLE Bot",
@@ -14,7 +15,8 @@
       "description": "Authorized BLE lab scout on Cardputer keyboard UI",
       "url": "https://github.com/salvador-Data/BLE-Bot-Cardputer/releases/latest/download/ble_bot.bin",
       "bin": "ble_bot.bin",
-      "size": 0
+      "size": 0,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     }
   ]
 }

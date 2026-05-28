@@ -27,13 +27,20 @@ bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t
 
     strncpy(ssidOut, ssids[pick].c_str(), ssidLen - 1);
     ssidOut[ssidLen - 1] = '\0';
-    ui::showMessage("WiFi", "Set password in\nplatformio build or\nextend wifi_manager");
+
+    passOut[0] = '\0';
+    ui::promptPassword(passOut, passLen, "WiFi password");
+
+    ui::drawHeader("WiFi connect");
+    m5os::lcd().setCursor(4, 30);
+    m5os::lcd().println(ssidOut);
     WiFi.begin(ssidOut, passOut);
     uint8_t tries = 0;
     while (WiFi.status() != WL_CONNECTED && tries < 24) {
         delay(500);
         tries++;
     }
+    passOut[0] = '\0';
     if (WiFi.status() == WL_CONNECTED) {
         log::info("wifi_connected", wifiIpAddress());
         ui::showMessage("WiFi", wifiIpAddress(), TFT_GREEN);

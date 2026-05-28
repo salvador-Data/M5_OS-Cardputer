@@ -24,3 +24,7 @@ jobs:
         run: pip install platformio intelhex
       - name: Build Cardputer firmware
         run: pio run -e m5stack-cardputer
+      - name: Validate manifest JSON
+        run: python scripts/validate_manifest.py data/manifest.example.json
+      - name: Run host-side tests
+        run: pip install pytest && pytest tests/ -v
