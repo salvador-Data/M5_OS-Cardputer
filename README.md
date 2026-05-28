@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/salvadordata/M5_OS-Cardputer/actions/workflows/build.yml">
-    <img src="https://github.com/salvadordata/M5_OS-Cardputer/actions/workflows/build.yml/badge.svg" alt="Build"/>
+  <a href="https://github.com/salvador-Data/M5_OS-Cardputer/actions/workflows/build.yml">
+    <img src="https://github.com/salvador-Data/M5_OS-Cardputer/actions/workflows/build.yml/badge.svg" alt="Build"/>
   </a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT"/></a>
   <a href="https://docs.m5stack.com/en/core/Cardputer"><img src="https://img.shields.io/badge/hardware-M5Stack%20Cardputer-00C2FF" alt="Cardputer"/></a>
@@ -23,7 +23,7 @@
 
 **M5 OS** turns your Cardputer into a small **handheld OS shell**: list firmware on microSD, download new packages from a manifest, browse files, switch themes, and join Wi-Fi — all from a clean menu tuned for the built-in keyboard.
 
-Built by **[salvadordata](https://github.com/salvadordata)** / **Hacker Planet LLC** for makers, students, and authorized security researchers who live in the M5 + ESP32 ecosystem.
+Built by **[salvador-Data](https://github.com/salvador-Data)** / **Hacker Planet LLC** for makers, students, and authorized security researchers who live in the M5 + ESP32 ecosystem.
 
 <p align="center">
   <img src="docs/images/menu-ui.png" alt="M5 OS menu UI concept" width="520"/>
@@ -54,7 +54,7 @@ Longer background → **[docs/ABOUT.md](docs/ABOUT.md)**
 ### PlatformIO (recommended)
 
 ```bash
-git clone https://github.com/salvadordata/M5_OS-Cardputer.git
+git clone https://github.com/salvador-Data/M5_OS-Cardputer.git
 cd M5_OS-Cardputer
 pip install platformio
 pio run -e m5stack-cardputer -t upload
@@ -113,8 +113,8 @@ For **education and authorized testing** on devices and networks you own. You ar
 
 ## Related projects
 
-- [Mr.-CrackBot-AI-Nano](https://github.com/salvadordata/Mr.-CrackBot-AI-Nano) — Jetson Nano lab automation
-- [M5-Cardputer-Mr.-Robot-Handshake-Keeper](https://github.com/salvadordata/M5-Cardputer-Mr.-Robot-Handshake-Keeper) — Cardputer security research sketch
+- [Mr.-CrackBot-AI-Nano](https://github.com/salvador-Data/Mr.-CrackBot-AI-Nano) — Jetson Nano lab automation
+- [M5-Cardputer-Mr.-Robot-Handshake-Keeper](https://github.com/salvador-Data/M5-Cardputer-Mr.-Robot-Handshake-Keeper) — Cardputer security research sketch
 
 ---
 

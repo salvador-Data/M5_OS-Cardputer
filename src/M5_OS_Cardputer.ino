@@ -1,7 +1,7 @@
 /**
  * M5 OS — Cardputer edition
  * Multi-app launcher / firmware manager for M5Stack Cardputer (ESP32-S3)
- * Hacker Planet LLC / salvadordata
+ * Hacker Planet LLC / salvador-Data
  *
  * Controls: ;/w up · ./s down · Enter/Space select · ` back
  */
@@ -19,7 +19,7 @@
 
 static const char* kFirmwareDir = "/firmware";
 static const char* kManifestUrl =
-    "https://raw.githubusercontent.com/salvadordata/M5_OS-Cardputer/main/data/manifest.example.json";
+    "https://raw.githubusercontent.com/salvador-Data/M5_OS-Cardputer/main/data/manifest.example.json";
 
 static uint16_t themePrimary = 0xB6DF;
 static uint16_t themeSecondary = 0x0083;
@@ -296,7 +296,7 @@ static void introSplash() {
     m5os::lcd().setCursor(10, 70);
     m5os::lcd().println("Cardputer Edition");
     m5os::lcd().setCursor(10, 90);
-    m5os::lcd().println("salvadordata / Hacker Planet");
+    m5os::lcd().println("salvador-Data / Hacker Planet");
     delay(2000);
 }
 

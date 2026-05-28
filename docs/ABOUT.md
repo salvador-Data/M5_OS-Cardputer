@@ -6,7 +6,7 @@ It is built for **owners and builders** who want a Flipper-style *launcher* expe
 
 ## Who made it
 
-- **Author:** [salvadordata](https://github.com/salvadordata)
+- **Author:** [salvador-Data](https://github.com/salvador-Data)
 - **Org:** Hacker Planet LLC — defensive security tooling, portable labs, and education-first hardware projects.
 
 ## Design goals
