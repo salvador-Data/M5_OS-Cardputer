@@ -81,7 +81,7 @@ pio run -e m5stack-cardputer -t upload
 ### M5Burner
 
 1. Build with PlatformIO, then flash the generated `.bin` from `.pio/build/m5stack-cardputer/`
-2. Or use [M5Burner](https://docs.m5stack.com/en/uiflow/m5burner/intro) with the Cardputer target once you publish a release asset
+2. Or use [M5Burner](https://docs.m5stack.com/en/uiflow/m5burner/intro) with the Cardputer target once I publish a release asset
 
 ---
 
