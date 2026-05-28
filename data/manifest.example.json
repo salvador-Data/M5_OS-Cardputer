@@ -1,0 +1,11 @@
+{
+  "firmware": [
+    {
+      "name": "demo_app",
+      "version": "1.0.0",
+      "description": "Example slot — host your .bin URL here",
+      "url": "https://example.com/firmware/demo_app.bin",
+      "size": 0
+    }
+  ]
+}
