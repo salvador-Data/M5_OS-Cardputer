@@ -27,6 +27,22 @@ Built by **[salvador-Data](https://github.com/salvador-Data)** / **Hacker Planet
 
 Part of the **Hacker Planet** toolkit → [project ecosystem](https://github.com/salvador-Data/cyberThreatGotchi/blob/main/docs/ECOSYSTEM.md).
 
+![M5 Cardputer + CTG](https://raw.githubusercontent.com/salvador-Data/cyberThreatGotchi/main/docs/images/og-m5-cardputer.png)
+
+Poll **CyberThreatGotchi** mood from the field:
+
+| Client | Path |
+|--------|------|
+| MicroPython | [ctg_status.py](https://github.com/salvador-Data/cyberThreatGotchi/blob/main/scripts/cardputer/ctg_status.py) |
+| PlatformIO firmware | [scripts/cardputer/platformio](https://github.com/salvador-Data/cyberThreatGotchi/tree/main/scripts/cardputer/platformio) |
+
+```ini
+# platformio.ini — set CTG_HOST to your BPI-R3 Mini IP
+-DCTG_HOST=\"192.168.1.50\"
+```
+
+Full guide: [CARDPUTER.md](https://github.com/salvador-Data/cyberThreatGotchi/blob/main/docs/CARDPUTER.md).
+
 <p align="center">
   <img src="docs/images/menu-ui.png" alt="M5 OS menu UI concept" width="520"/>
 </p>
