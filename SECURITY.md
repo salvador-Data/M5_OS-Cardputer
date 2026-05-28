@@ -7,7 +7,9 @@
 | Asset | Risk | Mitigation |
 |-------|------|------------|
 | Firmware images on SD / OTA | Tampered `.bin` flash | Optional `sha256` in manifest; verified on download and before `Update.write` |
-| Manifest JSON | Malicious URLs or paths | HTTPS-only URL whitelist; `bin` basename sanitization (no `..` or `/`) |
+| Manifest JSON | Malicious URLs or paths | HTTPS-only URL whitelist; `bin` basename sanitization (no `..` or `/`); VFS slug segments whitelisted |
+| SD compartments | Cross-app tampering | Apps isolated under `/apps/<slug>/`; user data under `/home/default/apps/<slug>/` |
+| Storage cleanup | Deletes app or user data | Boot GC: `/tmp` TTL + log rotation only; cache reclaim requires menu confirm; never auto-deletes `/apps/<slug>/` |
 | Wi-Fi credentials | Leak via serial log | Passwords entered on-device only; cleared from RAM after connect; never logged |
 | Serial JSON log | Sensitive data exposure | Logs events and IPs only — no passwords, tokens, or full HTTP bodies |
 
@@ -60,7 +62,27 @@ If `sha256` is omitted, download and launch proceed with a serial `*_checksum_sk
 
 ## SD path safety
 
-Firmware is stored only under `/firmware/` using sanitized basenames (`[A-Za-z0-9._-]+.bin`, max 64 chars). Entries like `../evil.bin` or `/etc/passwd.bin` are rejected.
+Firmware is stored under **`/apps/<slug>/<name>.bin`** (preferred) or legacy **`/firmware/`** using sanitized basenames (`[A-Za-z0-9._-]+.bin`, max 64 chars). Directory slugs are sanitized (`[a-z0-9_-]+`, max 48 chars). Entries like `../evil.bin`, `foo/bar.bin`, or `/etc/passwd.bin` are rejected.
+
+Manifest path: **`/apps/manifest.json`** (legacy `/manifest.json` accepted). Only entries in the manifest whitelist are offered for download; SHA256 verification on download and launch is unchanged.
+
+Host-side path/GC helpers:
+
+```bash
+python scripts/m5os_paths.py  # importable module
+pytest tests/test_m5os_paths.py -v
+```
+
+## Garbage collection
+
+| Scope | When | Actions |
+|-------|------|---------|
+| Boot quick scan | Every boot | Delete `/tmp` files older than 24h; rotate `/var/log` files >32KB; trim to 5 log files |
+| Menu **Storage cleanup** | User confirm | Above + reclaim orphaned files in `/home/default/cache` not tied to whitelisted apps |
+
+**FAT32 limitation:** ESP32 SD does not perform filesystem defragmentation/compaction. M5 OS rotates and trims logs instead of claiming contiguous free space. Document lab cards with occasional reformat if heavily fragmented.
+
+Whitelisted app directories under `/apps/` are **never** auto-deleted.
 
 ## Flash failure and rollback
 

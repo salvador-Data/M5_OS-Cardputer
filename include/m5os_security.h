@@ -11,6 +11,9 @@ bool isAllowedHttpsUrl(const String& url);
 /** SD filename only — rejects path traversal and invalid characters. */
 String sanitizeBinFilename(const String& raw);
 
+/** Single VFS path segment — lowercase slug for /apps/<seg>/ and /home/.../<seg>/. */
+String sanitizePathSegment(const String& raw);
+
 /** Lowercase 64-char hex SHA-256 digest. Empty if invalid. */
 String normalizeSha256Hex(const String& raw);
 

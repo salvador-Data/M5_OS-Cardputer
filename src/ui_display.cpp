@@ -1,8 +1,108 @@
 #include "ui_display.h"
 
+#include <M5Unified.h>
+
 namespace m5os::ui {
 
 static Theme gTheme;
+static unsigned long gBootStartMs = 0;
+
+namespace {
+
+uint16_t lerp565(uint16_t a, uint16_t b, uint8_t t) {
+    const uint8_t ta = 255 - t;
+    const uint8_t ar = (a >> 11) & 0x1F;
+    const uint8_t ag = (a >> 5) & 0x3F;
+    const uint8_t ab = a & 0x1F;
+    const uint8_t br = (b >> 11) & 0x1F;
+    const uint8_t bg = (b >> 5) & 0x3F;
+    const uint8_t bb = b & 0x1F;
+    const uint8_t r = (ar * ta + br * t) >> 8;
+    const uint8_t g = (ag * ta + bg * t) >> 8;
+    const uint8_t bl = (ab * ta + bb * t) >> 8;
+    return static_cast<uint16_t>((r << 11) | (g << 5) | bl);
+}
+
+void playBootChime() {
+    auto& spk = M5.Speaker;
+    if (!spk.isEnabled()) spk.begin();
+    const int notes[] = {392, 494, 587, 784};
+    for (int freq : notes) {
+        spk.tone(freq, 70);
+        delay(85);
+    }
+    spk.stop();
+}
+
+const char* stageLabel(BootStage stage) {
+    switch (stage) {
+        case BootStage::MountSd:
+            return "Mount SD";
+        case BootStage::LoadManifest:
+            return "Load manifest";
+        case BootStage::GcScan:
+            return "GC quick scan";
+        case BootStage::Ready:
+            return "Ready";
+        default:
+            return "";
+    }
+}
+
+int stagePercent(BootStage stage) {
+    switch (stage) {
+        case BootStage::MountSd:
+            return 20;
+        case BootStage::LoadManifest:
+            return 55;
+        case BootStage::GcScan:
+            return 80;
+        case BootStage::Ready:
+            return 100;
+        default:
+            return 0;
+    }
+}
+
+void drawBootFrame(int percent, const char* label, const String& detail, uint8_t pulse) {
+    auto& d = m5os::lcd();
+    d.fillScreen(TFT_BLACK);
+    d.setTextSize(2);
+    d.setTextColor(gTheme.primary, TFT_BLACK);
+    d.setCursor(14, 18);
+    d.println("M5 OS");
+    d.setTextSize(1);
+    d.setTextColor(gTheme.secondary, TFT_BLACK);
+    d.setCursor(10, 42);
+    d.println("Hacker Planet / WhiteHat CyberSec");
+    d.setCursor(10, 56);
+    d.println("salvador-Data");
+
+    const int barX = 10;
+    const int barY = 78;
+    const int barW = d.width() - 20;
+    const int barH = 10;
+    d.drawRect(barX, barY, barW, barH, gTheme.secondary);
+    const int fillW = max(2, (barW - 2) * percent / 100);
+    const uint16_t fillColor = lerp565(gTheme.primary, gTheme.secondary, pulse);
+    d.fillRect(barX + 1, barY + 1, fillW, barH - 2, fillColor);
+
+    d.setTextColor(TFT_WHITE, TFT_BLACK);
+    d.setCursor(10, 96);
+    d.printf("%s", label);
+    if (detail.length()) {
+        d.setCursor(10, 110);
+        d.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        d.println(detail);
+    }
+
+    d.drawFastHLine(0, d.height() - 14, d.width(), gTheme.primary);
+    d.setCursor(6, d.height() - 12);
+    d.setTextColor(gTheme.secondary, TFT_BLACK);
+    d.print("Authorized lab use only");
+}
+
+}  // namespace
 
 Theme& theme() { return gTheme; }
 
@@ -15,6 +115,10 @@ void setThemePreset(int preset) {
         case 2:
             gTheme.primary = 0xF800;
             gTheme.secondary = 0x7800;
+            break;
+        case 3:
+            gTheme.primary = 0x05A1;
+            gTheme.secondary = 0xCE9F;
             break;
         default:
             gTheme.primary = 0xB6DF;
@@ -44,19 +148,34 @@ void showMessage(const char* title, const String& body, uint16_t color, unsigned
     delay(holdMs);
 }
 
+void bootIntroBegin() {
+    setThemePreset(3);
+    gBootStartMs = millis();
+    for (uint8_t pulse = 0; pulse < 16; ++pulse) {
+        drawBootFrame(5, "Booting", "", pulse * 16);
+        delay(40);
+    }
+    playBootChime();
+}
+
+void bootIntroStage(BootStage stage, const String& detail) {
+    const int target = stagePercent(stage);
+    for (uint8_t pulse = 0; pulse < 8; ++pulse) {
+        drawBootFrame(target, stageLabel(stage), detail, static_cast<uint8_t>(pulse * 32));
+        delay(35);
+    }
+}
+
+void bootIntroFinish() {
+    bootIntroStage(BootStage::Ready, "");
+    const unsigned long elapsed = millis() - gBootStartMs;
+    if (elapsed < 2200) delay(2200 - elapsed);
+}
+
 void introSplash() {
-    auto& d = m5os::lcd();
-    d.fillScreen(TFT_BLACK);
-    d.setTextSize(2);
-    d.setTextColor(gTheme.primary, TFT_BLACK);
-    d.setCursor(20, 40);
-    d.println("M5 OS");
-    d.setTextSize(1);
-    d.setCursor(10, 70);
-    d.println("Cardputer Edition");
-    d.setCursor(10, 90);
-    d.println("salvador-Data / Hacker Planet");
-    delay(2000);
+    bootIntroBegin();
+    bootIntroStage(BootStage::Ready, "");
+    bootIntroFinish();
 }
 
 Buttons readButtonsExtended() {

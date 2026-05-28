@@ -8,9 +8,12 @@ static const int kSdSclkPin = 14;
 static const int kSdMisoPin = 39;
 static const int kSdMosiPin = 40;
 
-static const char* kFirmwareDir = "/firmware";
-static const char* kSdManifestPath = "/manifest.json";
-static const char* kLauncherMarkerPath = "/M5OS_CARDPUTER.txt";
+/** Primary manifest on SD "hard drive"; legacy root manifest still accepted. */
+static const char* kSdManifestPath = "/apps/manifest.json";
+static const char* kLegacyManifestPath = "/manifest.json";
+static const char* kFirmwareDir = "/apps";
+static const char* kLegacyFirmwareDir = "/firmware";
+static const char* kLauncherMarkerPath = "/system/M5OS_CARDPUTER.txt";
 
 #ifndef M5OS_MANIFEST_URL
 #define M5OS_MANIFEST_URL \

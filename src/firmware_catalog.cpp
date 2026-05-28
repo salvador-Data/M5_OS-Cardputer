@@ -2,12 +2,12 @@
 
 #include "m5os_config.h"
 #include "m5os_security.h"
+#include "m5os_vfs.h"
 #include "serial_log.h"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <SD.h>
-#include <SPI.h>
 #include <WiFi.h>
 #include <mbedtls/sha256.h>
 
@@ -31,6 +31,7 @@ bool parseManifestPayload(const String& payload, std::vector<FirmwarePackage>& o
         FirmwarePackage pkg;
         pkg.name = normalizeName(item["name"] | "");
         if (!pkg.name.length()) continue;
+        pkg.slug = vfs::slugFromName(pkg.name);
         pkg.version = item["version"] | "1.0.0";
         pkg.url = item["url"] | "";
         pkg.size = item["size"] | 0;
@@ -70,73 +71,129 @@ String hashDownloadStream(WiFiClient* stream, File& out) {
     return security::computeSha256Hex(digest, sizeof(digest));
 }
 
+void scanDirBins(const char* dirPath, std::vector<FirmwarePackage>& out) {
+    File dir = SD.open(dirPath);
+    if (!dir) return;
+    File entry;
+    while ((entry = dir.openNextFile())) {
+        if (entry.isDirectory()) {
+            String subName = entry.name();
+            entry.close();
+            const int slash = subName.lastIndexOf('/');
+            const String slug = security::sanitizePathSegment(subName.substring(slash + 1));
+            if (slug.length()) {
+                File sub = SD.open((String(dirPath) + "/" + slug).c_str());
+                if (sub && sub.isDirectory()) {
+                    File binEntry;
+                    while ((binEntry = sub.openNextFile())) {
+                        if (!binEntry.isDirectory()) {
+                            String binName = binEntry.name();
+                            const int binSlash = binName.lastIndexOf('/');
+                            const String binFile = security::sanitizeBinFilename(binName.substring(binSlash + 1));
+                            if (binFile.length()) {
+                                bool duplicate = false;
+                                for (const auto& existing : out) {
+                                    if (existing.binFile == binFile) duplicate = true;
+                                }
+                                if (!duplicate) {
+                                    FirmwarePackage pkg;
+                                    pkg.slug = slug;
+                                    pkg.binFile = binFile;
+                                    pkg.name = slug;
+                                    pkg.version = "local";
+                                    pkg.installed = true;
+                                    out.push_back(pkg);
+                                }
+                            }
+                        }
+                        binEntry.close();
+                    }
+                }
+                if (sub) sub.close();
+            }
+            continue;
+        }
+        String name = entry.name();
+        const int slash = name.lastIndexOf('/');
+        const String binFile = security::sanitizeBinFilename(name.substring(slash + 1));
+        if (binFile.length()) {
+            bool duplicate = false;
+            for (const auto& existing : out) {
+                if (existing.binFile == binFile) duplicate = true;
+            }
+            if (!duplicate) {
+                FirmwarePackage pkg;
+                pkg.binFile = binFile;
+                pkg.slug = vfs::slugFromName(binFile.substring(0, binFile.length() - 4));
+                pkg.name = pkg.slug;
+                pkg.version = "local";
+                pkg.installed = true;
+                out.push_back(pkg);
+            }
+        }
+        entry.close();
+    }
+    dir.close();
+}
+
 }  // namespace
 
 String FirmwareCatalog::slugToBinFile(const String& name) {
-    String slug = name;
-    slug.toLowerCase();
-    slug.replace(' ', '_');
-    if (slug == "remote_possibility" || slug == "remote-possibility") {
-        return String(kAppRemotePossibility) + ".bin";
-    }
-    if (slug == "ble_bot" || slug == "ble-bot") return String(kAppBleBot) + ".bin";
+    String slug = vfs::slugFromName(name);
+    if (slug == "remote_possibility") return String(kAppRemotePossibility) + ".bin";
+    if (slug == "ble_bot") return String(kAppBleBot) + ".bin";
     return slug + ".bin";
 }
 
 String FirmwareCatalog::binPathFor(const String& binFile) const {
     const String safe = security::sanitizeBinFilename(binFile);
     if (!safe.length()) return "";
-    return String(kFirmwareDir) + "/" + safe;
+    const String slug = vfs::slugFromName(safe.substring(0, safe.length() - 4));
+    return vfs::binPathFor(slug, safe);
+}
+
+String FirmwareCatalog::binPathForPackage(const FirmwarePackage& pkg) const {
+    const String safe = security::sanitizeBinFilename(pkg.binFile);
+    if (!safe.length()) return "";
+    const String slug = pkg.slug.length() ? pkg.slug : vfs::slugFromName(pkg.name);
+    return vfs::binPathFor(slug, safe);
 }
 
 bool FirmwareCatalog::ensureStorage() {
-    SPI.begin(kSdMosiPin, kSdMisoPin, kSdSclkPin, kSdCsPin);
-    if (!SD.begin(kSdCsPin, SPI, 25000000)) {
-        log::info("sd_missing");
-        return false;
-    }
-    if (!SD.exists(kFirmwareDir)) SD.mkdir(kFirmwareDir);
-    if (!SD.exists(kLauncherMarkerPath)) {
-        File marker = SD.open(kLauncherMarkerPath, FILE_WRITE);
-        if (marker) {
-            marker.println("M5 OS Cardputer launcher");
-            marker.close();
-        }
-    }
-    log::info("sd_ready");
+    const vfs::MountResult mount = vfs::mountAndInit();
+    if (!mount.ok) return false;
     return true;
 }
 
 void FirmwareCatalog::scanInstalled() {
     installed_.clear();
-    File dir = SD.open(kFirmwareDir);
-    if (!dir) return;
-    File entry;
-    while ((entry = dir.openNextFile())) {
-        if (!entry.isDirectory()) {
-            String name = entry.name();
-            const int slash = name.lastIndexOf('/');
-            const String binFile = security::sanitizeBinFilename(name.substring(slash + 1));
-            if (binFile.length()) {
-                FirmwarePackage pkg;
-                pkg.binFile = binFile;
-                pkg.name = binFile.substring(0, binFile.length() - 4);
-                pkg.version = "local";
-                pkg.installed = true;
-                installed_.push_back(pkg);
-            }
-        }
-        entry.close();
-    }
-    dir.close();
+    scanDirBins(kFirmwareDir, installed_);
+    scanDirBins(kLegacyFirmwareDir, installed_);
     mergeInstalledFlags();
     log::info("installed_scan", String(installed_.size()) + " bins");
 }
 
 void FirmwareCatalog::mergeInstalledFlags() {
     for (auto& pkg : available_) {
-        pkg.installed = SD.exists(binPathFor(pkg.binFile).c_str());
+        pkg.installed = SD.exists(binPathForPackage(pkg).c_str());
     }
+}
+
+std::vector<String> FirmwareCatalog::whitelistedAppSlugs() const {
+    std::vector<String> slugs;
+    for (const auto& pkg : available_) {
+        if (pkg.slug.length()) slugs.push_back(pkg.slug);
+    }
+    for (const auto& pkg : installed_) {
+        if (pkg.slug.length()) {
+            bool found = false;
+            for (const auto& s : slugs) {
+                if (s == pkg.slug) found = true;
+            }
+            if (!found) slugs.push_back(pkg.slug);
+        }
+    }
+    return slugs;
 }
 
 bool FirmwareCatalog::refreshFromNetwork(const char* manifestUrl) {
@@ -165,9 +222,9 @@ bool FirmwareCatalog::refreshFromNetwork(const char* manifestUrl) {
     return true;
 }
 
-bool FirmwareCatalog::refreshFromSdManifest() {
-    if (!SD.exists(kSdManifestPath)) return false;
-    File in = SD.open(kSdManifestPath, FILE_READ);
+bool FirmwareCatalog::loadSdManifestFrom(const char* path) {
+    if (!SD.exists(path)) return false;
+    File in = SD.open(path, FILE_READ);
     if (!in) return false;
     String payload;
     while (in.available()) payload += static_cast<char>(in.read());
@@ -176,6 +233,11 @@ bool FirmwareCatalog::refreshFromSdManifest() {
     scanInstalled();
     log::info("manifest_sd_loaded", String(available_.size()) + " packages");
     return true;
+}
+
+bool FirmwareCatalog::refreshFromSdManifest() {
+    if (loadSdManifestFrom(kSdManifestPath)) return true;
+    return loadSdManifestFrom(kLegacyManifestPath);
 }
 
 bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
@@ -189,6 +251,11 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
         log::info("download_bin_rejected", pkg.name);
         return false;
     }
+    const String slug = pkg.slug.length() ? pkg.slug : vfs::slugFromName(pkg.name);
+    if (!vfs::ensureAppDirs(slug)) {
+        log::info("download_dir_fail", pkg.name);
+        return false;
+    }
     HTTPClient http;
     http.begin(pkg.url);
     http.setTimeout(20000);
@@ -198,7 +265,7 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
         log::info("download_http_fail", String(code));
         return false;
     }
-    const String path = binPathFor(safeBin);
+    const String path = String(vfs::appDirFor(slug)) + "/" + safeBin;
     if (!path.length()) {
         http.end();
         return false;
@@ -233,8 +300,9 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
 }
 
 FirmwarePackage* FirmwareCatalog::findInstalledByName(const String& name) {
+    const String slug = vfs::slugFromName(name);
     for (auto& pkg : installed_) {
-        if (pkg.name.equalsIgnoreCase(name) || pkg.binFile.startsWith(name)) return &pkg;
+        if (pkg.name.equalsIgnoreCase(name) || pkg.slug == slug || pkg.binFile.startsWith(name)) return &pkg;
     }
     return nullptr;
 }

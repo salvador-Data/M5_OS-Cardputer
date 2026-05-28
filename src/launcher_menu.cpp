@@ -2,6 +2,8 @@
 
 #include "burner_bridge.h"
 #include "m5os_config.h"
+#include "m5os_gc.h"
+#include "m5os_vfs.h"
 #include "serial_log.h"
 #include "ui_display.h"
 #include "wifi_manager.h"
@@ -137,7 +139,7 @@ void LauncherMenu::showFileExplorer(const char* path) {
 }
 
 void LauncherMenu::showThemeMenu() {
-    static const char* themes[] = {"Baby Blue", "Hacker Green", "Mr. Robot Red"};
+    static const char* themes[] = {"Baby Blue", "Hacker Green", "Mr. Robot Red", "Hacker Planet"};
     std::vector<String> labels;
     for (auto* t : themes) labels.push_back(t);
     const int pick = ui::selectFromList(labels, "Theme");
@@ -155,6 +157,34 @@ void LauncherMenu::showBurnerBridge() {
     ui::showMessage("Recovery", burner::recoveryInstructions());
 }
 
+void LauncherMenu::showStorageCleanup() {
+    ui::drawHeader("Storage cleanup");
+    m5os::lcd().setCursor(4, 28);
+    m5os::lcd().setTextColor(TFT_WHITE, TFT_BLACK);
+    m5os::lcd().println("Sweep /tmp, rotate logs,");
+    m5os::lcd().println("reclaim cache orphans.");
+    m5os::lcd().setCursor(4, 64);
+    m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
+    m5os::lcd().print("Enter confirm  ` cancel");
+
+    while (true) {
+        m5os::update();
+        Buttons keys = m5os::readButtons();
+        if (keys.back) return;
+        if (keys.ok) {
+            const auto slugs = catalog_.whitelistedAppSlugs();
+            const m5os::gc::GcReport report = m5os::gc::fullCleanup(true, slugs);
+            String body = String(report.tmpRemoved) + " tmp, ";
+            body += String(report.cacheRemoved) + " cache, ";
+            body += String(report.logsRotated) + " logs";
+            body += "\n~" + String(report.bytesReclaimed / 1024) + " KB";
+            ui::showMessage("Cleanup done", body, TFT_GREEN, 2400);
+            return;
+        }
+        delay(80);
+    }
+}
+
 void LauncherMenu::showHelp() { ui::drawHelpOverlay(); }
 
 void LauncherMenu::runMainLoop() {
@@ -162,6 +192,7 @@ void LauncherMenu::runMainLoop() {
         "Launch installed app",
         "Download from catalog",
         "Refresh manifest",
+        "Storage cleanup",
         "Export catalog (serial)",
         "File explorer",
         "Theme",
@@ -186,22 +217,25 @@ void LauncherMenu::runMainLoop() {
                 refreshCatalog();
                 break;
             case 3:
+                showStorageCleanup();
+                break;
+            case 4:
                 exportCatalogSerial();
                 ui::showMessage("Exported", "Catalog on USB serial", TFT_GREEN, 900);
                 break;
-            case 4:
-                showFileExplorer("/");
-                break;
             case 5:
-                showThemeMenu();
+                showFileExplorer(vfs::kHomeDefaultDir);
                 break;
             case 6:
-                showWifiSetup();
+                showThemeMenu();
                 break;
             case 7:
-                showBurnerBridge();
+                showWifiSetup();
                 break;
             case 8:
+                showBurnerBridge();
+                break;
+            case 9:
                 showHelp();
                 break;
             default:

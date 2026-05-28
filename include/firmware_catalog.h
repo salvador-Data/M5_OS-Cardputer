@@ -7,6 +7,7 @@ namespace m5os {
 
 struct FirmwarePackage {
     String name;
+    String slug;  // compartment dir under /apps/<slug>/
     String version;
     String url;
     size_t size = 0;
@@ -28,10 +29,13 @@ public:
     FirmwarePackage* findInstalledByName(const String& name);
     const FirmwarePackage* findByBinFile(const String& binFile) const;
     String binPathFor(const String& binFile) const;
+    String binPathForPackage(const FirmwarePackage& pkg) const;
+    std::vector<String> whitelistedAppSlugs() const;
     static String slugToBinFile(const String& name);
 
 private:
     void mergeInstalledFlags();
+    bool loadSdManifestFrom(const char* path);
 
     std::vector<FirmwarePackage> installed_;
     std::vector<FirmwarePackage> available_;

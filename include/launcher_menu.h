@@ -17,6 +17,7 @@ public:
     void showThemeMenu();
     void showWifiSetup();
     void showBurnerBridge();
+    void showStorageCleanup();
     void showHelp();
     void exportCatalogSerial();
 

@@ -21,7 +21,7 @@
 
 ## About
 
-**M5 OS** turns your Cardputer into a small **handheld OS shell**: list firmware on microSD, download new packages from a manifest, browse files, switch themes, and join Wi-Fi — all from a clean menu tuned for the built-in keyboard.
+**M5 OS** turns your Cardputer into a small **handheld OS shell** with an SD-card “hard drive” layout: compartmentalized apps under `/apps/`, user data in `/home/default/`, temp and logs on `/tmp` and `/var/log`. List firmware, download from manifest, browse files, run storage cleanup, switch themes, and join Wi-Fi — all from a keyboard-first menu.
 
 Built by **[salvador-Data](https://github.com/salvador-Data)** / **Hacker Planet LLC** for makers, students, and authorized security researchers who live in the M5 + ESP32 ecosystem.
 
@@ -56,11 +56,14 @@ Full guide: [CARDPUTER.md](https://github.com/salvador-Data/cyberThreatGotchi/bl
 
 | Feature | Description |
 |--------|-------------|
-| **Launch installed apps** | Flash & run `.bin` from SD `/firmware/` (Remote Possibility, BLE Bot, …) |
-| **Catalog download** | Pull entries from JSON manifest over Wi-Fi or SD `/manifest.json` |
+| **Launch installed apps** | Flash & run whitelisted `.bin` from `/apps/<name>/` (legacy `/firmware/` still supported) |
+| **Catalog download** | Pull entries from JSON manifest over Wi-Fi or SD `/apps/manifest.json` |
+| **SD VFS layout** | `/system`, `/apps`, `/home/default`, `/tmp`, `/var/log` on FAT32 microSD |
+| **Storage cleanup** | Boot GC quick scan + menu **Storage cleanup** (tmp TTL, log rotation, cache reclaim) |
+| **Boot splash** | Hacker Planet teal/magenta intro with progress bar + chiptune beep |
 | **Serial logging** | JSON events on USB `@ 115200` (boot, catalog, launch, burner help) |
 | **File explorer** | Walk SD paths from the device |
-| **Themes** | Baby Blue (default), Hacker Green, Mr. Robot Red |
+| **Themes** | Baby Blue, Hacker Green, Mr. Robot Red, **Hacker Planet** (default boot) |
 | **Wi-Fi setup** | Scan and connect before downloading |
 | **M5Burner bridge** | On-device recovery steps + serial workflow for desktop flash |
 
@@ -110,7 +113,28 @@ Serial monitor `@ 115200` — JSON boot/catalog/launch logs.
 
 ## Firmware catalog
 
-Copy [`data/manifest.example.json`](data/manifest.example.json) to your host or to SD `/manifest.json`. Default URL is compiled from `include/m5os_config.h` (override with `-DM5OS_MANIFEST_URL=...`).
+Copy [`data/manifest.example.json`](data/manifest.example.json) to SD **`/apps/manifest.json`** (legacy root `/manifest.json` still accepted). Default URL is compiled from `include/m5os_config.h` (override with `-DM5OS_MANIFEST_URL=...`).
+
+### SD “hard drive” layout
+
+On first boot with a FAT32 card inserted, M5 OS creates:
+
+```text
+/system/              OS marker, /system/bin/gc service note
+/apps/
+  manifest.json       App registry (whitelist + SHA256)
+  remote_possibility/
+    remote_possibility.bin
+  ble_bot/
+    ble_bot.bin
+/home/default/
+  apps/<name>/        Per-app data compartments
+  cache/              Reclaimable cache (GC menu)
+/tmp/                 Temp files (24h TTL sweep on boot)
+/var/log/             Rotated logs (no FAT defrag — see SECURITY.md)
+```
+
+**Legacy:** flat `/firmware/*.bin` and root `/manifest.json` still work; new downloads land in `/apps/<slug>/`.
 
 Shipped catalog entries link **external** Hacker Planet apps:
 
@@ -119,7 +143,14 @@ Shipped catalog entries link **external** Hacker Planet apps:
 | Remote Possibility | [Remote-Possibility](https://github.com/salvador-Data/Remote-Possibility) | `remote_possibility.bin` |
 | BLE Bot | [BLE-Bot-Cardputer](https://github.com/salvador-Data/BLE-Bot-Cardputer) | `ble_bot.bin` |
 
-Drop offline `.bin` files on SD:
+Drop offline `.bin` files on SD (preferred compartment layout):
+
+```text
+/apps/remote_possibility/remote_possibility.bin
+/apps/ble_bot/ble_bot.bin
+```
+
+Or legacy flat paths:
 
 ```text
 /firmware/remote_possibility.bin
@@ -155,20 +186,25 @@ Get-FileHash -Algorithm SHA256 data/firmware/ble_bot.bin  # Windows PowerShell
 ```text
 M5_OS-Cardputer/
 ├── src/
-│   ├── main.cpp              # Boot + menu entry
+│   ├── main.cpp              # Boot sequence + menu entry
+│   ├── m5os_vfs.cpp          # SD VFS mount + path layout
+│   ├── m5os_gc.cpp           # Storage cleanup (boot + menu)
 │   ├── launcher_menu.cpp     # Main menu & sub-screens
 │   ├── firmware_catalog.cpp  # Manifest + SD package manager
 │   ├── app_launcher.cpp      # Flash .bin from SD (Update API)
-│   ├── ui_display.cpp        # Keyboard + LCD UI
+│   ├── ui_display.cpp        # Keyboard + LCD UI + boot splash
 │   ├── burner_bridge.cpp     # M5Burner recovery workflow
 │   ├── wifi_manager.cpp      # Wi-Fi scan/connect
+│   ├── m5os_security.cpp     # URL whitelist + path sanitizers
 │   └── serial_log.cpp        # USB JSON logging
-├── include/                  # Headers (m5os_config, M5OSDevice, …)
+├── include/                  # Headers (m5os_config, m5os_vfs, …)
+├── scripts/
+│   ├── validate_manifest.py
+│   └── m5os_paths.py         # Host VFS/GC helpers (pytest)
+├── tests/
+│   ├── test_validate_manifest.py
+│   └── test_m5os_paths.py
 ├── data/manifest.example.json
-├── archive/                  # Legacy monolithic sketch
-├── docs/
-├── platformio.ini
-└── docs/CARDPUTER_PRODUCTS.md
 ```
 
 ---

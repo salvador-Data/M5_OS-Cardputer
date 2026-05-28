@@ -41,9 +41,25 @@ bool isAllowedHttpsUrl(const String& url) {
     return isAllowedHostPath(host, path);
 }
 
+String sanitizePathSegment(const String& raw) {
+    String seg = raw;
+    seg.trim();
+    seg.toLowerCase();
+    if (!seg.length() || seg.indexOf("..") >= 0 || seg.indexOf('/') >= 0 || seg.indexOf('\\') >= 0) {
+        return "";
+    }
+    for (unsigned i = 0; i < seg.length(); ++i) {
+        const char c = seg.charAt(i);
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) return "";
+    }
+    if (seg.length() > 48) return "";
+    return seg;
+}
+
 String sanitizeBinFilename(const String& raw) {
     String name = raw;
     name.trim();
+    if (name.indexOf("..") >= 0) return "";
     const int slash = max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
     if (slash >= 0) name = name.substring(slash + 1);
     if (!name.length() || name.indexOf("..") >= 0) return "";
