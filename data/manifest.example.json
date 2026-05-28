@@ -3,7 +3,7 @@
     {
       "name": "Remote Possibility",
       "version": "1.0.0",
-      "description": "CTG field remote — poll /api/status over Wi-Fi",
+      "description": "Universal IR remote — learn, library, scan NEC codes for TV/fan/AC on M5 Cardputer",
       "url": "https://github.com/salvador-Data/Remote-Possibility/releases/latest/download/firmware.bin",
       "bin": "remote_possibility.bin",
       "size": 889792,

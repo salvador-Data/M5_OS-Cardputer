@@ -4,7 +4,7 @@ Hacker Planet LLC ships two Philadelphia-assembled Cardputer SKUs (see [PRODUCT_
 
 | Firmware | Price | Role |
 |----------|-------|------|
-| **Remote Possibility** | $89.99 | Poll CyberThreatGotchi `/api/status` from the field |
+| **Remote Possibility** | $99.99 | Universal IR remote — learn, SD library, scan TV/fan/AC |
 | **BLE Bot** | $79.99 | Authorized BLE scout / proximity lab on Cardputer keyboard UI |
 
 **M5 OS** (this repo) is the primary Cardputer launcher — install it first, then sideload app `.bin` files from the manifest or SD.
@@ -42,7 +42,7 @@ Host [`data/manifest.example.json`](data/manifest.example.json) or copy to SD `/
   "url": "https://github.com/salvador-Data/Remote-Possibility/releases/latest/download/firmware.bin",
   "bin": "remote_possibility.bin",
   "sha256": "<64-char lowercase hex — sha256sum firmware.bin>",
-  "description": "CTG field remote status client"
+  "description": "Universal IR remote — learn, library, scan (Hacker Planet LLC)"
 },
 {
   "name": "BLE Bot",
