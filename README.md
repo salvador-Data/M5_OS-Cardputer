@@ -29,6 +29,13 @@ Part of the **Hacker Planet** toolkit → [project ecosystem](https://github.com
 
 ![M5 Cardputer + CTG](https://raw.githubusercontent.com/salvador-Data/cyberThreatGotchi/main/docs/images/og-m5-cardputer.png)
 
+| Product | Description |
+|---------|-------------|
+| **Remote Possibility** | CTG field remote — poll `/api/status` over Wi‑Fi |
+| **BLE Bot** | Authorized BLE scout on Cardputer keyboard UI |
+
+Product page → [HackerPlanet Cardputer](https://salvador-Data.github.io/cyberThreatGotchi/cardputer.html) · [docs/CARDPUTER_PRODUCTS.md](docs/CARDPUTER_PRODUCTS.md)
+
 Poll **CyberThreatGotchi** mood from the field:
 
 | Client | Path |
