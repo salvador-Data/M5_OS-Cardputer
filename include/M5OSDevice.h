@@ -23,6 +23,8 @@ struct Buttons {
     bool down = false;
     bool ok = false;
     bool back = false;
+    bool help = false;
+    bool exportKey = false;
 };
 
 inline Buttons readButtons() {

@@ -1,4 +1,4 @@
-﻿# M5 Cardputer field firmware â€” Remote Possibility & BLE Bot
+﻿# M5 Cardputer field firmware — Remote Possibility & BLE Bot
 
 Hacker Planet LLC ships two Philadelphia-assembled Cardputer SKUs (see [PRODUCT_PRICING.md](https://github.com/salvador-Data/cyberThreatGotchi/blob/main/docs/PRODUCT_PRICING.md)):
 
@@ -7,30 +7,67 @@ Hacker Planet LLC ships two Philadelphia-assembled Cardputer SKUs (see [PRODUCT_
 | **Remote Possibility** | $89.99 | Poll CyberThreatGotchi `/api/status` from the field |
 | **BLE Bot** | $79.99 | Authorized BLE scout / proximity lab on Cardputer keyboard UI |
 
-## DIY flash
+**M5 OS** (this repo) is the primary Cardputer launcher — install it first, then sideload app `.bin` files from the manifest or SD.
 
-1. Build **M5 OS** base from this repo (`pio run -e m5stack-cardputer -t upload`).
-2. Add firmware packages to your manifest (`data/manifest.example.json`):
+## External app repos (not bundled)
+
+| App | Repository | SD filename |
+|-----|------------|-------------|
+| Remote Possibility | [Remote-Possibility](https://github.com/salvador-Data/Remote-Possibility) | `remote_possibility.bin` |
+| BLE Bot | [BLE-Bot-Cardputer](https://github.com/salvador-Data/BLE-Bot-Cardputer) | `ble_bot.bin` |
+
+Build each app in its own repo, copy the `.bin` to SD `/firmware/`, or download via M5 OS **Download from catalog** when Wi-Fi is connected.
+
+## SD layout
+
+```text
+/
+├── manifest.json              ← optional offline catalog (copy from data/manifest.example.json)
+├── M5OS_CARDPUTER.txt         ← auto-created launcher marker
+└── firmware/
+    ├── remote_possibility.bin
+    └── ble_bot.bin
+```
+
+## Manifest entry template
+
+Host [`data/manifest.example.json`](data/manifest.example.json) or copy to SD `/manifest.json`:
 
 ```json
 {
   "name": "Remote Possibility",
   "version": "1.0.0",
   "url": "https://github.com/salvador-Data/Remote-Possibility/releases/latest/download/firmware.bin",
+  "bin": "remote_possibility.bin",
   "description": "CTG field remote status client"
 },
 {
   "name": "BLE Bot",
   "version": "1.0.0",
-  "url": "https://github.com/salvador-Data/BLE-Bot-Cardputer/raw/main/data/firmware/ble_bot.bin",
+  "url": "https://github.com/salvador-Data/BLE-Bot-Cardputer/releases/latest/download/ble_bot.bin",
+  "bin": "ble_bot.bin",
   "description": "Authorized BLE lab scout"
 }
 ```
 
-3. PlatformIO CTG client reference â†’ [Remote-Possibility](https://github.com/salvador-Data/cyberThreatGotchi/tree/main/scripts/cardputer).
+Override the default manifest URL at build time:
+
+```ini
+build_flags =
+    -DM5OS_MANIFEST_URL=\"https://example.com/my-manifest.json\"
+```
+
+## Launch workflow
+
+1. Flash **M5 OS** (`pio run -e m5stack-cardputer -t upload`) or via [M5Burner](https://docs.m5stack.com/en/uiflow/m5burner/intro) (Cardputer target).
+2. Insert SD, **Refresh manifest** (Wi-Fi or `/manifest.json`).
+3. **Download from catalog** or copy `.bin` files to `/firmware/`.
+4. **Launch installed app** — M5 OS flashes the selected `.bin` and reboots into that app.
+
+**Return to M5 OS:** reflash M5 OS via M5Burner or PlatformIO (menu → **M5Burner / recovery** on device shows steps). Field apps may also offer their own return menu when co-installed.
 
 ## Shop
 
-- [cardputer.html](https://salvador-Data.github.io/cyberThreatGotchi/cardputer.html) Â· `#remote-possibility` Â· `#ble-bot`
+- [cardputer.html](https://hackerplanet.dev/cardputer.html) · `#remote-possibility` · `#ble-bot`
 
 *Authorized networks only.*

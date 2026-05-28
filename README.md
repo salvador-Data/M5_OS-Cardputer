@@ -56,11 +56,13 @@ Full guide: [CARDPUTER.md](https://github.com/salvador-Data/cyberThreatGotchi/bl
 
 | Feature | Description |
 |--------|-------------|
-| **Installed apps** | Lists `.bin` files in `/firmware/` on SD |
-| **Catalog download** | Pulls entries from a JSON manifest over Wi-Fi |
+| **Launch installed apps** | Flash & run `.bin` from SD `/firmware/` (Remote Possibility, BLE Bot, …) |
+| **Catalog download** | Pull entries from JSON manifest over Wi-Fi or SD `/manifest.json` |
+| **Serial logging** | JSON events on USB `@ 115200` (boot, catalog, launch, burner help) |
 | **File explorer** | Walk SD paths from the device |
 | **Themes** | Baby Blue (default), Hacker Green, Mr. Robot Red |
 | **Wi-Fi setup** | Scan and connect before downloading |
+| **M5Burner bridge** | On-device recovery steps + serial workflow for desktop flash |
 
 Longer background → **[docs/ABOUT.md](docs/ABOUT.md)**
 
@@ -99,19 +101,32 @@ pio run -e m5stack-cardputer -t upload
 | `;` / `W` | Move up |
 | `.` / `S` | Move down |
 | `Enter` / `Space` | Select |
+| `h` / `?` | Keyboard shortcuts |
 | `` ` `` | Back |
+
+Serial monitor `@ 115200` — JSON boot/catalog/launch logs.
 
 ---
 
 ## Firmware catalog
 
-Copy [`data/manifest.example.json`](data/manifest.example.json) to your own host (or GitHub raw URL) and point `kManifestUrl` in `src/M5_OS_Cardputer.ino` to it. Each entry needs `name`, `version`, `url`, and optional `description` / `size`.
+Copy [`data/manifest.example.json`](data/manifest.example.json) to your host or to SD `/manifest.json`. Default URL is compiled from `include/m5os_config.h` (override with `-DM5OS_MANIFEST_URL=...`).
+
+Shipped catalog entries link **external** Hacker Planet apps:
+
+| App | Repo | SD file |
+|-----|------|---------|
+| Remote Possibility | [Remote-Possibility](https://github.com/salvador-Data/Remote-Possibility) | `remote_possibility.bin` |
+| BLE Bot | [BLE-Bot-Cardputer](https://github.com/salvador-Data/BLE-Bot-Cardputer) | `ble_bot.bin` |
 
 Drop offline `.bin` files on SD:
 
 ```text
-/firmware/my_tool.bin
+/firmware/remote_possibility.bin
+/firmware/ble_bot.bin
 ```
+
+Use **Launch installed app** to flash from SD. To return to M5 OS, reflash this launcher via PlatformIO or M5Burner (menu → **M5Burner / recovery**).
 
 ---
 
@@ -119,13 +134,21 @@ Drop offline `.bin` files on SD:
 
 ```text
 M5_OS-Cardputer/
-├── src/                 # Cardputer firmware (maintained)
-├── include/             # Device helpers (keyboard, display)
-├── archive/             # Legacy M5Stack sketch
-├── data/                # Example manifest + firmware folder
-├── docs/images/         # README artwork
+├── src/
+│   ├── main.cpp              # Boot + menu entry
+│   ├── launcher_menu.cpp     # Main menu & sub-screens
+│   ├── firmware_catalog.cpp  # Manifest + SD package manager
+│   ├── app_launcher.cpp      # Flash .bin from SD (Update API)
+│   ├── ui_display.cpp        # Keyboard + LCD UI
+│   ├── burner_bridge.cpp     # M5Burner recovery workflow
+│   ├── wifi_manager.cpp      # Wi-Fi scan/connect
+│   └── serial_log.cpp        # USB JSON logging
+├── include/                  # Headers (m5os_config, M5OSDevice, …)
+├── data/manifest.example.json
+├── archive/                  # Legacy monolithic sketch
+├── docs/
 ├── platformio.ini
-└── docs/ABOUT.md
+└── docs/CARDPUTER_PRODUCTS.md
 ```
 
 ---
