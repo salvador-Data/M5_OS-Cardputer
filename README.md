@@ -25,6 +25,8 @@
 
 Built by **[salvador-Data](https://github.com/salvador-Data)** / **Hacker Planet LLC** for makers, students, and authorized security researchers who live in the M5 + ESP32 ecosystem.
 
+Part of the **Hacker Planet** toolkit → [project ecosystem](https://github.com/salvador-Data/cyberThreatGotchi/blob/main/docs/ECOSYSTEM.md).
+
 <p align="center">
   <img src="docs/images/menu-ui.png" alt="M5 OS menu UI concept" width="520"/>
 </p>
