@@ -141,7 +141,11 @@ Validate a manifest on your PC:
 
 ```bash
 python scripts/validate_manifest.py data/manifest.example.json
-sha256sum ble_bot.bin   # Linux/macOS — paste digest into manifest sha256 field
+python scripts/validate_manifest.py data/manifest.example.json \
+  --verify-bin ble_bot.bin=data/firmware/ble_bot.bin \
+  --verify-bin remote_possibility.bin=data/firmware/remote_possibility.bin
+sha256sum ble_bot.bin   # Linux/macOS - paste digest into manifest sha256 field
+Get-FileHash -Algorithm SHA256 data/firmware/ble_bot.bin  # Windows PowerShell
 ```
 
 ---
