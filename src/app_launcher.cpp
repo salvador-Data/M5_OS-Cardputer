@@ -25,6 +25,22 @@ constexpr char kLaunchNs[] = "m5os_launch";
 constexpr char kLastBinKey[] = "last_bin";
 constexpr char kLastShaKey[] = "last_sha";
 
+struct LaunchProgressCtx {
+    const char* label;
+    String detailPrefix;
+};
+
+LaunchProgressCtx gHashProgressCtx;
+
+void paintLaunchProgress(size_t done, size_t total, LaunchProgressCtx* ctx) {
+    if (!ctx || !ctx->label || total == 0) return;
+    const int pct = static_cast<int>(min(100ULL, (done * 100ULL) / total));
+    ui::showFlashProgress(pct, ctx->label, ctx->detailPrefix + "\n" + String(done) + " / " + String(total));
+    m5os::update();
+}
+
+void hashProgressShim(size_t hashed, size_t total) { paintLaunchProgress(hashed, total, &gHashProgressCtx); }
+
 bool canSkipFlashToCachedOta(const String& binFile, const String& sha256) {
     if (!sha256.length()) return false;
 
@@ -55,6 +71,49 @@ void storeLaunchCache(const String& binFile, const String& sha256) {
     prefs.end();
 }
 
+bool copySdToOta(File& firmware, size_t firmwareSize, const String& safeBin, LaunchResult& result) {
+    LaunchProgressCtx ctx{"Copy to run slot", safeBin + "\nfrom SD (no WiFi)"};
+    paintLaunchProgress(0, firmwareSize, &ctx);
+
+    saveHomeAppPartition();
+    if (!Update.begin(firmwareSize)) {
+        result.message = "Update.begin failed";
+        log::info("launch_begin_fail", String(Update.errorString()));
+        return false;
+    }
+
+    uint8_t buffer[512];
+    size_t written = 0;
+    while (firmware.available()) {
+        const size_t n = firmware.read(buffer, sizeof(buffer));
+        if (n == 0) break;
+        if (Update.write(buffer, n) != n) {
+            Update.abort();
+            result.message = "Write failed — launcher intact";
+            log::info("launch_write_fail");
+            return false;
+        }
+        written += n;
+        if (written == n || written % 512 == 0 || !firmware.available()) {
+            paintLaunchProgress(written, firmwareSize, &ctx);
+        }
+    }
+
+    if (written != firmwareSize) {
+        Update.abort();
+        result.message = "Read incomplete " + String(written) + "/" + String(firmwareSize);
+        log::info("launch_read_incomplete", String(written));
+        return false;
+    }
+
+    if (!Update.end(true)) {
+        result.message = "Update.end failed — launcher intact";
+        log::info("launch_end_fail", String(Update.errorString()));
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 AppLauncher::AppLauncher(FirmwareCatalog& catalog) : catalog_(catalog) {}
@@ -67,6 +126,10 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         log::info("launch_bin_rejected");
         return result;
     }
+
+    ui::showFlashProgress(0, "Load app", safeBin + "\nPreparing...");
+    m5os::update();
+
     String path;
     if (const FirmwarePackage* meta = catalog_.findByBinFile(safeBin)) {
         path = catalog_.binPathForPackage(*meta);
@@ -86,23 +149,12 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
             log::info("launch_spiffs_blocked", safeBin);
             return result;
         }
-        if (meta->fid.length() && WiFi.status() == WL_CONNECTED) {
-            burner::BurnerInstallPlan plan;
-            String version = meta->version;
-            if (version == "burner" || !version.length()) version = "";
-            if (burner::buildInstallPlan(meta->fid, version, plan) &&
-                burner::planRequiresSdOnly(plan)) {
-                result.message =
-                    "Needs SPIFFS on flash.\nUse M5Burner USB\nfull flash to run.\n(App on SD OK)";
-                log::info("launch_spiffs_blocked", safeBin);
-                return result;
-            }
-        }
     }
 
     File firmware = SD.open(path.c_str());
     if (!firmware) {
         result.message = "Cannot open bin";
+        log::info("launch_open_fail", path);
         return result;
     }
 
@@ -115,7 +167,17 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         return result;
     }
 
-    String sdDigest = security::computeFileSha256Hex(firmware);
+    ui::showFlashProgress(0, "Hashing", safeBin + "\nVerifying SD file");
+    m5os::update();
+    gHashProgressCtx = {"Hashing", safeBin + "\nVerifying SD file"};
+    const String sdDigest =
+        security::computeFileSha256HexWithProgress(firmware, firmwareSize, hashProgressShim);
+    if (!sdDigest.length()) {
+        firmware.close();
+        result.message = "Hash failed";
+        return result;
+    }
+
     if (const FirmwarePackage* meta = catalog_.findByBinFile(safeBin)) {
         if (meta->sha256.length()) {
             if (!security::sha256Equal(meta->sha256, sdDigest)) {
@@ -131,13 +193,10 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     } else {
         log::info("launch_checksum_skip", safeBin);
     }
-    firmware.close();
-
-    ui::showFlashProgress(0, "Load app", safeBin + "\nSD -> run slot");
-    m5os::update();
 
     if (canSkipFlashToCachedOta(safeBin, sdDigest)) {
         ui::showFlashProgress(100, "Load app", safeBin + "\nAlready loaded — reboot");
+        m5os::update();
         result.ok = true;
         result.skippedFlash = true;
         result.message = "Rebooting into app";
@@ -149,49 +208,11 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         return result;
     }
 
-    firmware = SD.open(path.c_str());
-    if (!firmware) {
-        result.message = "Cannot reopen bin";
-        return result;
-    }
-
-    ui::showFlashProgress(0, "Copy to run slot", safeBin + "\nfrom SD (no WiFi)");
-    m5os::update();
-
-    saveHomeAppPartition();
-    if (!Update.begin(firmwareSize)) {
+    if (!copySdToOta(firmware, firmwareSize, safeBin, result)) {
         firmware.close();
-        result.message = "Update.begin failed";
-        log::info("launch_begin_fail", String(Update.errorString()));
         return result;
-    }
-
-    uint8_t buffer[512];
-    size_t written = 0;
-    while (firmware.available()) {
-        const size_t n = firmware.read(buffer, sizeof(buffer));
-        if (Update.write(buffer, n) != n) {
-            Update.abort();
-            firmware.close();
-            result.message = "Write failed — launcher intact";
-            log::info("launch_write_fail");
-            return result;
-        }
-        written += n;
-        if (written == n || written % 512 == 0 || !firmware.available()) {
-            const int pct = static_cast<int>(min(100ULL, (written * 100ULL) / firmwareSize));
-            ui::showFlashProgress(pct, "Copy to run slot",
-                                  String(written) + " / " + String(firmwareSize));
-            m5os::update();
-        }
     }
     firmware.close();
-
-    if (!Update.end(true)) {
-        result.message = "Update.end failed — launcher intact";
-        log::info("launch_end_fail", String(Update.errorString()));
-        return result;
-    }
 
     storeLaunchCache(safeBin, sdDigest);
 

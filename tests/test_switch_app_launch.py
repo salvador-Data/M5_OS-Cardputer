@@ -63,5 +63,27 @@ def test_launch_blocks_spiffs_apps():
         "LaunchResult AppLauncher::flashBurnerPackage"
     )]
     assert "needsFlashSpiffs" in fn
-    assert "planRequiresSdOnly" in fn
     assert "launch_spiffs_blocked" in fn
+
+
+def test_launch_shows_progress_before_hash():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
+        "LaunchResult AppLauncher::flashBurnerPackage"
+    )]
+    assert fn.index("showFlashProgress") < fn.index("computeFileSha256HexWithProgress")
+    assert "Hashing" in fn
+    assert "copySdToOta" in fn
+
+
+def test_switcher_shows_progress_before_launch():
+    text = LAUNCHER_CPP.read_text(encoding="utf-8")
+    switcher = text[text.index("void LauncherMenu::showAppSwitcher") : text.index(
+        "void LauncherMenu::showInstalledApps"
+    )]
+    assert "Starting..." in switcher
+    assert "launchBinFile" in switcher
+    launch_idx = switcher.index("launchBinFile")
+    confirm_block = switcher[launch_idx - 200 : launch_idx + 80]
+    assert "showFlashProgress" in confirm_block
+    assert confirm_block.index("showFlashProgress") < confirm_block.index("launchBinFile")

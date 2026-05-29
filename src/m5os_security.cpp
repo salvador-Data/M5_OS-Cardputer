@@ -103,15 +103,25 @@ String computeSha256Hex(const uint8_t* data, size_t len) {
 }
 
 String computeFileSha256Hex(File& file) {
+    return computeFileSha256HexWithProgress(file, file ? file.size() : 0, nullptr);
+}
+
+String computeFileSha256HexWithProgress(File& file, size_t totalBytes,
+                                        void (*progress)(size_t hashed, size_t total)) {
     if (!file) return "";
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
     mbedtls_sha256_starts(&ctx, 0);
     uint8_t buffer[512];
+    size_t hashed = 0;
     while (file.available()) {
         const size_t n = file.read(buffer, sizeof(buffer));
         if (!n) break;
         mbedtls_sha256_update(&ctx, buffer, n);
+        hashed += n;
+        if (progress && (hashed == n || hashed % 512 == 0 || !file.available())) {
+            progress(hashed, totalBytes);
+        }
     }
     uint8_t digest[32];
     mbedtls_sha256_finish(&ctx, digest);

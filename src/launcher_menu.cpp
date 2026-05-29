@@ -147,6 +147,8 @@ void LauncherMenu::showAppSwitcher() {
                 m5os::update();
                 if (m5os::keyboardBackJustPressed()) break;
                 if (m5os::keyboardEnterJustPressed()) {
+                    ui::showFlashProgress(0, "Load app", pkg.name + "\nStarting...");
+                    m5os::update();
                     LaunchResult result = launcher_.launchBinFile(pkg.binFile);
                     if (!result.ok) ui::showMessage("Load app failed", result.message, TFT_RED);
                     return;

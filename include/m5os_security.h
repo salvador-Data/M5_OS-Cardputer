@@ -24,6 +24,10 @@ String computeSha256Hex(const uint8_t* data, size_t len);
 /** Hash file contents from current read position through end; rewinds to start on failure. */
 String computeFileSha256Hex(File& file);
 
+/** Same as computeFileSha256Hex but calls progress(hashed, total) every 512 bytes (TWDT-safe). */
+String computeFileSha256HexWithProgress(File& file, size_t totalBytes,
+                                        void (*progress)(size_t hashed, size_t total));
+
 bool sha256Equal(const String& expected, const String& actual);
 
 /** M5Burner / LauncherHub firmware id — 32 lowercase hex chars. */
