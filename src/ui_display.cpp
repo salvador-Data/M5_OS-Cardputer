@@ -423,27 +423,57 @@ void drawAngledEyeSlit(Display& d, int x0, int y0, int x1, int y1, uint16_t ink)
     for (int i = 0; i <= steps; ++i) {
         const int x = x0 + (x1 - x0) * i / steps;
         const int y = y0 + (y1 - y0) * i / steps;
-        d.drawPixel(x, y, ink);
-        d.drawPixel(x, y + 1, ink);
+        const int edgeDist = min(i, steps - i);
+        const int thick = (edgeDist >= steps / 5) ? 2 : 1;
+        for (int t = 0; t < thick; ++t) {
+            d.drawPixel(x, y + t, ink);
+        }
     }
 }
 
 template <typename Display>
-void drawArchedBrow(Display& d, int cx, int cy, int halfW, bool leftSide, uint16_t ink) {
-    const int dir = leftSide ? -1 : 1;
-    const int startX = cx + dir * halfW;
-    const int endX = cx + dir * max(2, halfW / 3);
-    const int midX = (startX + endX) / 2;
-    d.drawPixel(startX, cy, ink);
-    d.drawPixel(midX, cy - 1, ink);
-    d.drawPixel(endX, cy, ink);
-    if (halfW >= 5) d.drawPixel(midX + dir, cy - 1, ink);
+void drawArchedBrow(Display& d, int outerX, int innerX, int baseY, bool leftSide, uint16_t ink) {
+    const int xStart = leftSide ? outerX : innerX;
+    const int xEnd = leftSide ? innerX : outerX;
+    const int dir = (xEnd >= xStart) ? 1 : -1;
+    const int span = abs(xEnd - xStart);
+    for (int i = 0; i <= span; ++i) {
+        const int x = xStart + i * dir;
+        const int mid = span / 2;
+        const int dist = abs(i - mid);
+        const int arch = max(0, 2 - dist * 2 / max(1, span / 2));
+        d.drawPixel(x, baseY - arch, ink);
+        if (span >= 5 && arch >= 1) d.drawPixel(x, baseY - arch + 1, ink);
+    }
+}
+
+template <typename Display>
+void drawHandlebarMustache(Display& d, int cx, int stashY, int faceW, int faceR, uint16_t ink) {
+    const int gap = max(2, faceR / 7);
+    const int curlH = max(2, faceR / 7);
+    const int leftOuterX = cx - faceW + 1;
+    const int leftInnerX = cx - gap;
+    const int rightInnerX = cx + gap;
+    const int rightOuterX = cx + faceW - 1;
+
+    d.drawFastHLine(leftOuterX, stashY, leftInnerX - leftOuterX, ink);
+    d.drawFastHLine(rightInnerX, stashY, rightOuterX - rightInnerX, ink);
+
+    for (int i = 0; i < curlH; ++i) {
+        d.drawPixel(leftOuterX + i, stashY - 1 - i, ink);
+        d.drawPixel(rightOuterX - i, stashY - 1 - i, ink);
+        if (faceR >= 12) {
+            d.drawPixel(leftOuterX + i + 1, stashY - 1 - i, ink);
+            d.drawPixel(rightOuterX - i - 1, stashY - 1 - i, ink);
+        }
+    }
 }
 
 template <typename Display>
 void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
     const uint16_t ringColor = lerp565(gTheme.primary, gTheme.secondary, pulse);
     constexpr uint16_t kFaceCream = 0xFFDF;
+    constexpr uint16_t kCheekShadow = 0xDEFB;
     const uint16_t faceColor = kFaceCream;
     const uint16_t ink = TFT_BLACK;
 
@@ -454,9 +484,9 @@ void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
         d.drawCircle(cx, cy - 1, radius, fade);
     }
 
-    const int faceW = max(8, faceR);
-    const int faceH = max(12, faceR + faceR / 2 + 2);
-    const int chinY = cy + faceH / 2 + max(3, faceR / 3);
+    const int faceW = max(7, (faceR * 17) / 20);
+    const int faceH = max(11, faceR + (faceR * 3) / 5);
+    const int chinY = cy + faceH / 2 + max(2, faceR / 3);
     const int chinJoinY = cy + faceH / 4;
 
     d.fillEllipse(cx, cy - 1, faceW + 1, faceH + 1, ink);
@@ -465,57 +495,54 @@ void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
     d.fillTriangle(cx - faceW + 1, chinJoinY + 1, cx + faceW - 1, chinJoinY + 1, cx, chinY,
                    faceColor);
 
-    const int cheekY0 = cy - faceR / 5;
-    const int cheekY1 = cy + faceR / 3;
-    d.drawLine(cx - faceW + 1, cheekY0, cx - faceW / 2 + 1, cheekY1, ink);
-    d.drawLine(cx + faceW - 1, cheekY0, cx + faceW / 2 - 1, cheekY1, ink);
+    const int cheekTopY = cy - faceH / 6;
+    const int cheekMidY = cy + faceR / 5;
+    const int cheekBotY = cy + faceH / 3;
+    d.drawLine(cx - faceW + 1, cheekTopY, cx - faceW / 2, cheekMidY, ink);
+    d.drawLine(cx - faceW / 2, cheekMidY, cx - max(3, faceW / 3), cheekBotY, ink);
+    d.drawLine(cx + faceW - 1, cheekTopY, cx + faceW / 2, cheekMidY, ink);
+    d.drawLine(cx + faceW / 2, cheekMidY, cx + max(3, faceW / 3), cheekBotY, ink);
+    if (faceR >= 14) {
+        d.drawPixel(cx - faceW / 2, cheekMidY, kCheekShadow);
+        d.drawPixel(cx - faceW / 2 + 1, cheekMidY + 1, kCheekShadow);
+        d.drawPixel(cx + faceW / 2, cheekMidY, kCheekShadow);
+        d.drawPixel(cx + faceW / 2 - 1, cheekMidY + 1, kCheekShadow);
+    }
 
-    const int eyeMidY = cy - faceR / 8;
-    const int eyeSpan = max(4, faceR / 2);
-    const int eyeLift = max(1, faceR / 8);
-    const int leftOuterX = cx - faceW + 2;
-    const int leftInnerX = cx - eyeSpan / 2;
-    const int rightInnerX = cx + eyeSpan / 2;
-    const int rightOuterX = cx + faceW - 2;
-    drawAngledEyeSlit(d, leftInnerX, eyeMidY + 1, leftOuterX, eyeMidY - eyeLift, ink);
-    drawAngledEyeSlit(d, rightInnerX, eyeMidY + 1, rightOuterX, eyeMidY - eyeLift, ink);
+    const int eyeY = cy - faceH / 5;
+    const int eyeGap = max(3, faceR / 5);
+    const int eyeLift = max(1, faceR / 7);
+    const int leftOuterX = cx - faceW + max(2, faceR / 6);
+    const int leftInnerX = cx - eyeGap;
+    const int rightInnerX = cx + eyeGap;
+    const int rightOuterX = cx + faceW - max(2, faceR / 6);
+    drawAngledEyeSlit(d, leftInnerX, eyeY, leftOuterX, eyeY - eyeLift, ink);
+    drawAngledEyeSlit(d, rightInnerX, eyeY, rightOuterX, eyeY - eyeLift, ink);
 
-    const int browY = eyeMidY - max(3, faceR / 5);
-    drawArchedBrow(d, cx, browY, eyeSpan, true, ink);
-    drawArchedBrow(d, cx, browY, eyeSpan, false, ink);
+    const int browY = eyeY - max(3, faceR / 4);
+    drawArchedBrow(d, leftOuterX, leftInnerX, browY, true, ink);
+    drawArchedBrow(d, rightOuterX, rightInnerX, browY, false, ink);
 
-    const int noseTop = eyeMidY + 2;
+    const int noseTop = eyeY + max(2, faceR / 8);
     const int noseLen = max(3, faceR / 4);
     d.drawFastVLine(cx, noseTop, noseLen, ink);
-    if (faceR >= 14) {
+    if (faceR >= 12) {
         d.drawPixel(cx - 1, noseTop + noseLen - 1, ink);
         d.drawPixel(cx + 1, noseTop + noseLen - 1, ink);
     }
 
-    const int stashY = cy + max(2, faceR / 6);
-    const int stashEndX = cx - max(2, faceR / 8);
-    const int stashStartX = cx - faceW + 2;
-    d.drawFastHLine(stashStartX, stashY, stashEndX - stashStartX, ink);
-    d.drawFastHLine(cx + max(2, faceR / 8), stashY, faceW - max(2, faceR / 8) - 2, ink);
-    d.drawPixel(stashStartX, stashY - 1, ink);
-    d.drawPixel(stashStartX + 1, stashY - 2, ink);
-    d.drawPixel(cx + faceW - 3, stashY - 1, ink);
-    d.drawPixel(cx + faceW - 4, stashY - 2, ink);
+    const int stashY = cy + max(1, faceR / 5);
+    drawHandlebarMustache(d, cx, stashY, faceW, faceR, ink);
 
-    const int smileTop = stashY + 2;
-    const int smileDepth = max(2, faceR / 6);
-    d.drawLine(cx - max(2, faceR / 10), smileTop, cx, smileTop + smileDepth, ink);
-    d.drawLine(cx + max(2, faceR / 10), smileTop, cx, smileTop + smileDepth, ink);
+    const int smileTop = stashY + max(2, faceR / 8);
+    const int smileDepth = max(1, faceR / 7);
+    d.drawLine(cx - max(2, faceW / 4), smileTop, cx, smileTop + smileDepth, ink);
+    d.drawLine(cx + max(2, faceW / 4), smileTop, cx, smileTop + smileDepth, ink);
 
     const int goateeTop = smileTop + smileDepth + 1;
-    const int goateeW = max(2, faceR / 6);
+    const int goateeW = max(1, faceR / 7);
     d.fillTriangle(cx - goateeW, goateeTop, cx + goateeW, goateeTop, cx, chinY - 1, ink);
-    d.drawFastVLine(cx, goateeTop, chinY - goateeTop - 2, ink);
-
-    if (faceR >= 16) {
-        d.drawPixel(cx - 1, chinY - 2, ink);
-        d.drawPixel(cx + 1, chinY - 3, ink);
-    }
+    d.drawFastVLine(cx, goateeTop, chinY - goateeTop - 1, ink);
 
     d.drawEllipse(cx, cy - 1, faceW, faceH, ink);
     d.drawLine(cx - faceW + 1, chinJoinY, cx, chinY, ink);
