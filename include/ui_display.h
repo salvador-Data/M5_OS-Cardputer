@@ -14,6 +14,8 @@ struct Theme {
 
 enum class BootStage { MountSd, LoadManifest, GcScan, Ready };
 
+enum class PasswordPromptResult { Cancelled, Confirmed, ChangeNetwork };
+
 Theme& theme();
 void setThemePreset(int preset);
 int getThemePreset();
@@ -28,8 +30,8 @@ void introSplash();  // legacy single-frame splash
 void drawHelpOverlay();
 void drawBurnerHelp();
 int selectFromList(const std::vector<String>& items, const char* title, int startIndex = 0);
-/** Keyboard password entry — never logged to serial. Returns false if cancelled. */
-bool promptPassword(char* out, size_t outLen, const char* title);
+/** Keyboard password entry — never logged to serial. Tab = pick another AP. */
+PasswordPromptResult promptPassword(char* out, size_t outLen, const char* title);
 Buttons readButtonsExtended();
 
 }  // namespace m5os::ui

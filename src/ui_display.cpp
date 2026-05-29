@@ -132,7 +132,9 @@ void drawPasswordFrame(const char* title, size_t length, size_t scrollOffset, bo
 
     d.setTextColor(hintFg, TFT_BLACK);
     d.setCursor(4, 66);
-    d.printf("Enter save  ` cancel  (%u)", static_cast<unsigned>(length));
+    d.print("Del erase  Tab AP  Enter save  ` cancel");
+    d.setCursor(4, 78);
+    d.printf("(%u chars)", static_cast<unsigned>(length));
 }
 
 void playBootChime() {
@@ -403,15 +405,35 @@ void drawBurnerHelp() {
     }
 }
 
-bool promptPassword(char* out, size_t outLen, const char* title) {
-    if (!out || outLen < 2) return false;
+constexpr uint8_t kHidBackspace = 0x2a;
+
+bool keyboardWantsErase() {
+    if (!M5Cardputer.Keyboard.isPressed()) return false;
+    const auto status = M5Cardputer.Keyboard.keysState();
+    if (status.del) return true;
+    for (uint8_t key : status.hid_keys) {
+        if (key == kHidBackspace) return true;
+    }
+    return false;
+}
+
+void erasePasswordChar(char* out, size_t& length) {
+    if (length > 0) {
+        length--;
+        out[length] = '\0';
+    }
+}
+
+PasswordPromptResult promptPassword(char* out, size_t outLen, const char* title) {
+    if (!out || outLen < 2) return PasswordPromptResult::Cancelled;
     out[0] = '\0';
     size_t length = 0;
     size_t scrollOffset = 0;
     size_t lastDrawToken = SIZE_MAX;
     bool needFullFrame = true;
+    unsigned long lastEraseMs = 0;
+    bool eraseHeld = false;
 
-    // Drain stale keys from the network list.
     for (int i = 0; i < 30; ++i) {
         m5os::update();
         if (!M5Cardputer.Keyboard.isPressed()) break;
@@ -433,19 +455,36 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
 
         m5os::update();
 
+        if (keyboardWantsErase()) {
+            const unsigned long now = millis();
+            const unsigned long gap = eraseHeld ? 80UL : 0UL;
+            if (now - lastEraseMs >= gap) {
+                erasePasswordChar(out, length);
+                needFullFrame = true;
+                lastEraseMs = now;
+                eraseHeld = true;
+            }
+            delay(20);
+            continue;
+        }
+        eraseHeld = false;
+
         if (!M5Cardputer.Keyboard.isChange()) {
             delay(power::uiLoopDelayMs());
             continue;
         }
 
         const auto status = M5Cardputer.Keyboard.keysState();
+        if (status.tab) {
+            out[0] = '\0';
+            return PasswordPromptResult::ChangeNetwork;
+        }
         if (status.enter) {
             out[length] = '\0';
-            return true;
+            return PasswordPromptResult::Confirmed;
         }
-        if (status.del && length > 0) {
-            length--;
-            out[length] = '\0';
+        if (status.del) {
+            erasePasswordChar(out, length);
             needFullFrame = true;
             delay(power::uiLoopDelayMs());
             continue;
@@ -453,17 +492,14 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
         for (auto key : status.word) {
             if (key == '`' || key == 27) {
                 out[0] = '\0';
-                return false;
+                return PasswordPromptResult::Cancelled;
             }
             if (key == '\n' || key == '\r') {
                 out[length] = '\0';
-                return true;
+                return PasswordPromptResult::Confirmed;
             }
             if (key == '\b' || key == 127) {
-                if (length > 0) {
-                    length--;
-                    out[length] = '\0';
-                }
+                erasePasswordChar(out, length);
                 needFullFrame = true;
                 continue;
             }
