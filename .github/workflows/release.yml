@@ -1,0 +1,36 @@
+name: Release firmware
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-pio-m5-os
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install PlatformIO
+        run: pip install platformio intelhex
+      - name: Build Cardputer firmware
+        run: pio run -e m5stack-cardputer
+      - name: Validate manifest JSON
+        run: python scripts/validate_manifest.py data/manifest.example.json
+      - name: Run host-side tests
+        run: pip install pytest && pytest tests/ -v
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .pio/build/m5stack-cardputer/firmware.bin
+          generate_release_notes: true
