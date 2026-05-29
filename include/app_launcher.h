@@ -8,6 +8,7 @@ namespace m5os {
 
 struct LaunchResult {
     bool ok = false;
+    bool skippedFlash = false;
     String message;
 };
 

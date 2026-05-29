@@ -216,7 +216,7 @@ void reportStreamProgress(size_t written, size_t total, const char* label,
     if (!label || total == 0) return;
     const bool atStart = written == 0;
     const bool atEnd = written >= total;
-    const bool interval = written > 0 && (written % 4096 == 0);
+    const bool interval = written > 0 && (written % 512 == 0);
     if (!atStart && !atEnd && !interval) return;
     if (lastPainted && *lastPainted == written) return;
     if (lastPainted) *lastPainted = written;

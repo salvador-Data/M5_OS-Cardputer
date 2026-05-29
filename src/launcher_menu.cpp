@@ -104,7 +104,7 @@ void LauncherMenu::showAppSwitcher() {
         m5os::lcd().print("Enter launch  Tab next");
         m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
         m5os::lcd().setCursor(4, 118);
-        m5os::lcd().print("ESC/` menu  hold ` @ boot=M5 OS");
+        m5os::lcd().print("ESC/` confirm back");
         lastIndex = index;
         lastScroll = scroll;
     };
@@ -127,7 +127,10 @@ void LauncherMenu::showAppSwitcher() {
                 index = (index + 1) % static_cast<int>(installed.size());
             }
         }
-        if (keys.back) return;
+        if (keys.back) {
+            if (!ui::promptYesNo("Exit app?", "Return to main menu?")) continue;
+            return;
+        }
         if (keys.ok) {
             const auto& pkg = installed[index];
             ui::drawHeader("Launch app");
@@ -136,14 +139,17 @@ void LauncherMenu::showAppSwitcher() {
             m5os::lcd().setCursor(4, 44);
             m5os::lcd().println(pkg.description.length() ? pkg.description : "Field firmware");
             m5os::lcd().setCursor(4, 64);
-            m5os::lcd().print("Enter flash app slot");
+            m5os::lcd().print("Enter copy to run slot");
             m5os::lcd().setCursor(4, 78);
-            m5os::lcd().print("ESC/` cancel — apps stay on SD");
+            m5os::lcd().print("ESC/` confirm back");
 
             while (true) {
                 m5os::update();
                 Buttons confirm = m5os::readButtons();
-                if (confirm.back) break;
+                if (confirm.back) {
+                    if (!ui::promptYesNo("Exit app?", "Cancel without launching?")) continue;
+                    break;
+                }
                 if (confirm.ok) {
                     LaunchResult result = launcher_.launchBinFile(pkg.binFile);
                     if (!result.ok) ui::showMessage("Launch failed", result.message, TFT_RED);
@@ -448,7 +454,7 @@ void LauncherMenu::runMainLoop() {
     for (auto* item : items) labels.push_back(item);
 
     while (true) {
-        const int pick = ui::selectFromList(labels, "M5 OS Main");
+        const int pick = ui::selectFromList(labels, "M5 OS Main", 0, "Exit app?", "Open app switcher?");
         if (pick < 0) {
             showAppSwitcher();
             continue;

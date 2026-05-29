@@ -121,10 +121,19 @@ void drawStatusBar(M5GFX& display) {
         display.fillRect(barX + 1, barY + 1, fillW, barH - 2, barFillColor(pct, charging));
     }
 
+    display.setTextSize(1);
+    display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    display.setCursor(barX - 34, barY);
+    if (pct >= 0) {
+        display.printf("%3d%%", pct);
+    } else {
+        display.print(" --%");
+    }
+
     if (isSaving()) {
         display.setTextColor(TFT_ORANGE, TFT_BLACK);
         display.setTextSize(1);
-        display.setCursor(barX - 22, barY);
+        display.setCursor(barX - 58, barY);
         display.print("SAV");
     } else if (charging) {
         display.setTextColor(TFT_GREEN, TFT_BLACK);

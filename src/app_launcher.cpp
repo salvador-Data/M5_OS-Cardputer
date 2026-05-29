@@ -12,10 +12,51 @@
 
 #include <SD.h>
 #include <Update.h>
+#include <Preferences.h>
 #include <WiFi.h>
+#include <esp_ota_ops.h>
 #include <esp_system.h>
 
 namespace m5os {
+
+namespace {
+
+constexpr char kLaunchNs[] = "m5os_launch";
+constexpr char kLastBinKey[] = "last_bin";
+constexpr char kLastShaKey[] = "last_sha";
+
+bool tryBootCachedOta(const String& binFile, const String& sha256) {
+    if (!sha256.length()) return false;
+
+    Preferences prefs;
+    if (!prefs.begin(kLaunchNs, true)) return false;
+    const String lastBin = prefs.getString(kLastBinKey, "");
+    const String lastSha = prefs.getString(kLastShaKey, "");
+    prefs.end();
+
+    if (lastBin != binFile || !security::sha256Equal(lastSha, sha256)) return false;
+
+    const esp_partition_t* updatePart = esp_ota_get_next_update_partition(nullptr);
+    if (!updatePart) return false;
+
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    if (esp_ota_get_state_partition(updatePart, &state) != ESP_OK) return false;
+    if (state != ESP_OTA_IMG_VALID && state != ESP_OTA_IMG_PENDING_VERIFY) return false;
+
+    if (esp_ota_set_boot_partition(updatePart) != ESP_OK) return false;
+    log::info("launch_skip_flash", binFile);
+    return true;
+}
+
+void storeLaunchCache(const String& binFile, const String& sha256) {
+    Preferences prefs;
+    if (!prefs.begin(kLaunchNs, false)) return;
+    prefs.putString(kLastBinKey, binFile);
+    prefs.putString(kLastShaKey, sha256);
+    prefs.end();
+}
+
+}  // namespace
 
 AppLauncher::AppLauncher(FirmwareCatalog& catalog) : catalog_(catalog) {}
 
@@ -48,10 +89,11 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         log::info("launch_size_rejected", safeBin);
         return result;
     }
+
+    String sdDigest = security::computeFileSha256Hex(firmware);
     if (const FirmwarePackage* meta = catalog_.findByBinFile(safeBin)) {
         if (meta->sha256.length()) {
-            const String digest = security::computeFileSha256Hex(firmware);
-            if (!security::sha256Equal(meta->sha256, digest)) {
+            if (!security::sha256Equal(meta->sha256, sdDigest)) {
                 firmware.close();
                 result.message = "SHA256 mismatch";
                 log::info("launch_checksum_fail", safeBin);
@@ -64,8 +106,30 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     } else {
         log::info("launch_checksum_skip", safeBin);
     }
+    firmware.close();
 
-    ui::showFlashProgress(0, "Flashing app", safeBin + "\n" + String(firmwareSize) + " bytes");
+    ui::showFlashProgress(0, "Launch app", safeBin + "\nSD -> run slot");
+    m5os::update();
+
+    if (tryBootCachedOta(safeBin, sdDigest)) {
+        ui::showFlashProgress(100, "Launch app", safeBin + "\nAlready loaded — reboot");
+        result.ok = true;
+        result.skippedFlash = true;
+        result.message = "Rebooting into app";
+        log::info("launch_cached_ok", safeBin);
+        ui::showMessage("Launch", safeBin + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
+        delay(200);
+        esp_restart();
+        return result;
+    }
+
+    firmware = SD.open(path.c_str());
+    if (!firmware) {
+        result.message = "Cannot reopen bin";
+        return result;
+    }
+
+    ui::showFlashProgress(0, "Copy to run slot", safeBin + "\nfrom SD (no WiFi)");
     m5os::update();
 
     saveHomeAppPartition();
@@ -88,9 +152,9 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
             return result;
         }
         written += n;
-        if (written == n || written % 4096 == 0 || !firmware.available()) {
+        if (written == n || written % 512 == 0 || !firmware.available()) {
             const int pct = static_cast<int>(min(100ULL, (written * 100ULL) / firmwareSize));
-            ui::showFlashProgress(pct, "Flashing app",
+            ui::showFlashProgress(pct, "Copy to run slot",
                                   String(written) + " / " + String(firmwareSize));
             m5os::update();
         }
@@ -102,6 +166,8 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         log::info("launch_end_fail", String(Update.errorString()));
         return result;
     }
+
+    storeLaunchCache(safeBin, sdDigest);
 
     result.ok = true;
     result.message = "Rebooting into app";

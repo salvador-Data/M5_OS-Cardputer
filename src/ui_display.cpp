@@ -923,7 +923,55 @@ Buttons readButtonsExtended() {
     return b;
 }
 
-int selectFromList(const std::vector<String>& items, const char* title, int startIndex) {
+namespace {
+
+enum class YesNoKey { None, Yes, No };
+
+YesNoKey pollYesNoKey() {
+    if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) return YesNoKey::None;
+    auto status = M5Cardputer.Keyboard.keysState();
+    for (auto key : status.word) {
+        if (key == 'y' || key == 'Y') return YesNoKey::Yes;
+        if (key == 'n' || key == 'N') return YesNoKey::No;
+    }
+    return YesNoKey::None;
+}
+
+}  // namespace
+
+bool promptYesNo(const char* title, const char* question) {
+    while (true) {
+        drawHeader(title ? title : "Confirm");
+        auto& d = m5os::lcd();
+        d.setTextColor(TFT_WHITE, TFT_BLACK);
+        d.setCursor(8, 30);
+        d.println(question ? question : "Continue?");
+        d.setCursor(8, 56);
+        d.setTextColor(gTheme.secondary, TFT_BLACK);
+        d.println("Y  yes");
+        d.println("N  no");
+        d.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        d.setCursor(8, 92);
+        d.print("(` cancels)");
+
+        m5os::update();
+        Buttons keys = m5os::readButtons();
+        if (keys.back) return false;
+
+        switch (pollYesNoKey()) {
+            case YesNoKey::Yes:
+                return true;
+            case YesNoKey::No:
+                return false;
+            default:
+                break;
+        }
+        delay(power::uiLoopDelayMs());
+    }
+}
+
+int selectFromList(const std::vector<String>& items, const char* title, int startIndex,
+                   const char* backConfirmTitle, const char* backConfirmBody) {
     if (items.empty()) {
         showMessage(title, "No items");
         return -1;
@@ -956,7 +1004,11 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
         }
         m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
         m5os::lcd().setCursor(4, 118);
-        m5os::lcd().print("h help  ` back");
+        if (backConfirmTitle && backConfirmBody) {
+            m5os::lcd().print("h help  ` confirm back");
+        } else {
+            m5os::lcd().print("h help  ` back");
+        }
         lastIndex = index;
         lastScroll = scroll;
     };
@@ -975,7 +1027,12 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
         if (keys.up) index = (index > 0) ? index - 1 : static_cast<int>(items.size()) - 1;
         if (keys.down) index = (index + 1) % static_cast<int>(items.size());
         if (keys.ok) return index;
-        if (keys.back) return -1;
+        if (keys.back) {
+            if (backConfirmTitle && backConfirmBody) {
+                if (!promptYesNo(backConfirmTitle, backConfirmBody)) continue;
+            }
+            return -1;
+        }
         delay(power::uiLoopDelayMs());
     }
 }
@@ -991,9 +1048,12 @@ void drawHelpOverlay() {
     d.println("Tab       next app (in switcher)");
     d.println("h / ?     this help");
     d.println("e         export catalog serial");
-    d.println("ESC/`     back (submenus)");
+    d.println("ESC/`     back (Y/N confirm)");
     d.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    d.setCursor(4, 110);
+    d.setCursor(4, 104);
+    d.println("Apps live on SD; launch");
+    d.println("copies to run slot when needed.");
+    d.setCursor(4, 118);
     d.print("Authorized lab only");
     while (true) {
         m5os::update();
