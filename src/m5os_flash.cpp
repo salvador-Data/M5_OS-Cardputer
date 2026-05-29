@@ -130,7 +130,9 @@ bool launchStagedAppSession() {
     if (esp_ota_set_boot_partition(staging) != ESP_OK) return false;
     setLaunchPending(true);
     log::info("m5os_launch_staged", staging->label);
-    delay(200);
+    for (int i = 0; i < 20; ++i) {
+        delay(10);
+    }
     esp_restart();
     return true;
 }

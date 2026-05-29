@@ -87,3 +87,22 @@ def test_switcher_shows_progress_before_launch():
     confirm_block = switcher[launch_idx - 200 : launch_idx + 80]
     assert "showFlashProgress" in confirm_block
     assert confirm_block.index("showFlashProgress") < confirm_block.index("launchBinFile")
+
+
+def test_launch_reopens_sd_file_after_hash():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
+        "LaunchResult AppLauncher::flashBurnerPackage"
+    )]
+    assert "Cannot reopen bin for copy" in fn
+    assert "launch_reopen_fail" in fn
+    reopen = fn[fn.index("firmware.close();") : fn.index("copySdToOta")]
+    assert reopen.count("SD.open(path") >= 1
+    assert "launch_magic_fail" in text
+
+
+def test_show_message_feeds_watchdog():
+    text = (ROOT / "src" / "ui_display.cpp").read_text(encoding="utf-8")
+    fn = text[text.index("void showMessage(") : text.index("void bootIntroBegin")]
+    assert "m5os::update()" in fn
+    assert "delay(holdMs)" not in fn

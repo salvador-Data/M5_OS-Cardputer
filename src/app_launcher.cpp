@@ -111,6 +111,16 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& safeBin, Lau
         log::info("launch_end_fail", String(Update.errorString()));
         return false;
     }
+
+    const esp_partition_t* staged = stagingOtaPartition();
+    if (staged) {
+        uint8_t magic = 0;
+        if (esp_partition_read(staged, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
+            result.message = "Invalid app image in run slot";
+            log::info("launch_magic_fail", String(magic, HEX));
+            return false;
+        }
+    }
     return true;
 }
 
@@ -205,6 +215,15 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         if (launchStagedAppSession()) return result;
         result.ok = false;
         result.message = "Boot staged app failed";
+        return result;
+    }
+
+    firmware.close();
+
+    firmware = SD.open(path.c_str());
+    if (!firmware) {
+        result.message = "Cannot reopen bin for copy";
+        log::info("launch_reopen_fail", path);
         return result;
     }
 

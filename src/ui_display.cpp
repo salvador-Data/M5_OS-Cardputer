@@ -905,7 +905,11 @@ void showMessage(const char* title, const String& body, uint16_t color, unsigned
     d.setCursor(4, 28);
     d.setTextColor(themeHintOnBlack(), TFT_BLACK);
     d.println(body);
-    delay(holdMs);
+    const unsigned long until = millis() + holdMs;
+    while (static_cast<long>(millis() - until) < 0) {
+        m5os::update();
+        delay(10);
+    }
 }
 
 void bootIntroBegin() {
