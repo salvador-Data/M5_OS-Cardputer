@@ -23,9 +23,12 @@ static m5os::LauncherMenu gMenu(gCatalog, gLauncher);
 void setup() {
     m5os::log::begin();
     m5os::begin();
+
+    // Mount SD before boot splash redraws (dedicated HSPI — display uses SPI3).
+    const bool sdOk = gCatalog.ensureStorage();
     m5os::ui::bootIntroBegin();
 
-    if (!gCatalog.ensureStorage()) {
+    if (!sdOk) {
         m5os::ui::bootIntroStage(m5os::ui::BootStage::MountSd, "SD missing");
         m5os::ui::bootIntroFinish();
         m5os::ui::showMessage("Error", "Insert FAT32 SD\n/system /apps /home", TFT_RED, 3200);

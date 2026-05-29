@@ -167,6 +167,32 @@ The IRremote `-Wvolatile` pragma warning is harmless and can be ignored.
 
 ---
 
+## Latest release (Cardputer hardware fix)
+
+**Re-flash if you see:** screen flicker during boot/menus, SD not detected, or physical **Enter** not selecting items.
+
+| Fix | Detail |
+|-----|--------|
+| SD SPI | Official Cardputer pins (SCK **40**, MOSI **14**, MISO **39**, CS **12**) on dedicated **HSPI** so display SPI3 is not reset |
+| Enter key | Maps `Keyboard.keysState().enter` (HID Enter), not only `\n` in the word buffer |
+| Display | Boot splash draws once per stage; menus redraw only when selection changes |
+
+```powershell
+cd C:\Users\Owner\Projects\M5_OS-Cardputer
+```
+
+```powershell
+git pull
+```
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -j 1 -t upload
+```
+
+Insert a **FAT32** microSD (contacts away from the screen). On success, boot shows **VFS ready** and creates `/system`, `/apps`, `/home`.
+
+---
+
 ## Controls
 
 | Key | Action |

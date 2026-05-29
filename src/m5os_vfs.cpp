@@ -11,6 +11,27 @@ namespace m5os::vfs {
 
 namespace {
 
+SPIClass& sdSpiBus() {
+    static SPIClass bus(HSPI);
+    static bool begun = false;
+    if (!begun) {
+        bus.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
+        begun = true;
+    }
+    return bus;
+}
+
+bool trySdMount() {
+    SPIClass& bus = sdSpiBus();
+    const uint32_t speeds[] = {25000000, 10000000, 4000000};
+    for (uint32_t hz : speeds) {
+        if (SD.begin(kSdCsPin, bus, hz)) return true;
+        SD.end();
+        delay(20);
+    }
+    return false;
+}
+
 bool mkdirIfMissing(const char* path) {
     if (SD.exists(path)) return true;
     return SD.mkdir(path);
@@ -93,8 +114,8 @@ bool ensureAppDirs(const String& appSlug) {
 
 MountResult mountAndInit() {
     MountResult result;
-    SPI.begin(kSdMosiPin, kSdMisoPin, kSdSclkPin, kSdCsPin);
-    if (!SD.begin(kSdCsPin, SPI, 25000000)) {
+    delay(50);
+    if (!trySdMount()) {
         result.message = "SD card missing";
         log::info("sd_missing");
         return result;

@@ -32,11 +32,12 @@ inline Buttons readButtons() {
     if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) {
         return b;
     }
-    auto status = M5Cardputer.Keyboard.keysState();
+    const auto status = M5Cardputer.Keyboard.keysState();
+    if (status.enter || status.space) b.ok = true;
     for (auto key : status.word) {
         if (key == ';' || key == 'w' || key == 'W') b.up = true;
         if (key == '.' || key == 's' || key == 'S') b.down = true;
-        if (key == '\n' || key == ' ') b.ok = true;
+        if (key == '\n' || key == '\r') b.ok = true;
         if (key == '`' || key == 27) b.back = true;
     }
     return b;

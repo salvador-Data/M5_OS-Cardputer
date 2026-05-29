@@ -151,19 +151,13 @@ void showMessage(const char* title, const String& body, uint16_t color, unsigned
 void bootIntroBegin() {
     setThemePreset(3);
     gBootStartMs = millis();
-    for (uint8_t pulse = 0; pulse < 16; ++pulse) {
-        drawBootFrame(5, "Booting", "", pulse * 16);
-        delay(40);
-    }
+    drawBootFrame(5, "Booting", "", 0);
     playBootChime();
 }
 
 void bootIntroStage(BootStage stage, const String& detail) {
     const int target = stagePercent(stage);
-    for (uint8_t pulse = 0; pulse < 8; ++pulse) {
-        drawBootFrame(target, stageLabel(stage), detail, static_cast<uint8_t>(pulse * 32));
-        delay(35);
-    }
+    drawBootFrame(target, stageLabel(stage), detail, 0);
 }
 
 void bootIntroFinish() {
@@ -197,17 +191,20 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
     int index = startIndex;
     if (index < 0 || index >= static_cast<int>(items.size())) index = 0;
     int scroll = 0;
+    int lastIndex = -1;
+    int lastScroll = -1;
     constexpr int kVisible = 8;
 
-    while (true) {
+    auto redrawList = [&]() {
         drawHeader(title);
         if (index < scroll) scroll = index;
         if (index >= scroll + kVisible) scroll = index - kVisible + 1;
 
         for (int row = 0; row < kVisible; ++row) {
             const int i = scroll + row;
-            if (i >= static_cast<int>(items.size())) break;
             const int y = 24 + row * 14;
+            m5os::lcd().fillRect(4, y - 2, m5os::lcd().width() - 8, 14, TFT_BLACK);
+            if (i >= static_cast<int>(items.size())) continue;
             m5os::lcd().setCursor(8, y);
             if (i == index) {
                 m5os::lcd().setTextColor(gTheme.primary, gTheme.secondary);
@@ -220,6 +217,14 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
         m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
         m5os::lcd().setCursor(4, 118);
         m5os::lcd().print("h help  ` back");
+        lastIndex = index;
+        lastScroll = scroll;
+    };
+
+    redrawList();
+
+    while (true) {
+        if (index != lastIndex || scroll != lastScroll) redrawList();
 
         m5os::update();
         Buttons keys = readButtonsExtended();
@@ -305,7 +310,11 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
         }
 
         if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
-            auto status = M5Cardputer.Keyboard.keysState();
+            const auto status = M5Cardputer.Keyboard.keysState();
+            if (status.del && length > 0) {
+                length--;
+                out[length] = '\0';
+            }
             for (auto key : status.word) {
                 if (key == '\b' || key == 127) {
                     if (length > 0) {
@@ -313,10 +322,6 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
                         out[length] = '\0';
                     }
                     continue;
-                }
-                if (key == '\n' || key == '\r') {
-                    out[length] = '\0';
-                    return true;
                 }
                 if (length < outLen - 1 && key >= 32 && key <= 126) {
                     out[length++] = static_cast<char>(key);

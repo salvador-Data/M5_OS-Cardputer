@@ -2,11 +2,11 @@
 
 namespace m5os {
 
-// SD layout (Cardputer microSD SPI)
+// SD layout (Cardputer microSD SPI — docs.m5stack.com microSD socket)
 static const int kSdCsPin = 12;
-static const int kSdSclkPin = 14;
+static const int kSdSclkPin = 40;
 static const int kSdMisoPin = 39;
-static const int kSdMosiPin = 40;
+static const int kSdMosiPin = 14;
 
 /** Primary manifest on SD "hard drive"; legacy root manifest still accepted. */
 static const char* kSdManifestPath = "/apps/manifest.json";
