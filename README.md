@@ -151,6 +151,26 @@ If `pio` is on your PATH (PlatformIO Core installed globally), you can use `pio 
 & "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -j 1
 ```
 
+**Corrupted `.pio` cache (Windows):** If build fails with `The system cannot find the path specified` under `.pio\build\m5stack-cardputer\libc7f\SPI` or `FileNotFoundError: sconsign311.tmp`, the build tree is stale. Clean and rebuild:
+
+```powershell
+cd C:\Users\Owner\Projects\M5_OS-Cardputer
+```
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -t clean
+```
+
+If clean still errors, delete the env build folder, then rebuild single-job:
+
+```powershell
+Remove-Item -Recurse -Force .pio\build\m5stack-cardputer -ErrorAction SilentlyContinue
+```
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -j 1
+```
+
 The IRremote `-Wvolatile` pragma warning is harmless and can be ignored.
 
 ### VS Code + PlatformIO extension

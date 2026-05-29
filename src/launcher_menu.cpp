@@ -113,28 +113,62 @@ void LauncherMenu::refreshCatalog() {
 }
 
 void LauncherMenu::showFileExplorer(const char* path) {
+    if (!vfs::isMounted()) {
+        const vfs::MountResult remount = vfs::mountAndInit();
+        if (!remount.ok) {
+            String body = remount.message.length() ? remount.message : vfs::lastMountError();
+            if (!body.length()) body = "Insert FAT32 microSD";
+            body += "\n/contacts away from screen";
+            ui::showMessage("No SD", body, TFT_YELLOW);
+            return;
+        }
+        catalog_.scanInstalled();
+    }
+
+    String dirPath = path && path[0] ? String(path) : "/";
+    if (!dirPath.startsWith("/")) dirPath = "/" + dirPath;
+
     std::vector<String> entries;
     entries.push_back("[..]");
-    File dir = SD.open(path);
-    if (!dir) {
-        ui::showMessage("Error", "Cannot open path", TFT_RED);
+    File dir = SD.open(dirPath.c_str());
+    if (!dir || !dir.isDirectory()) {
+        String body = "Cannot open:\n" + dirPath;
+        if (vfs::lastMountError().length()) body += "\n" + vfs::lastMountError();
+        ui::showMessage("File explorer", body, TFT_RED);
+        if (dir) dir.close();
         return;
     }
     File entry;
     while ((entry = dir.openNextFile())) {
-        String entryName = entry.name();
-        if (entry.isDirectory()) entryName += "/";
-        entries.push_back(entryName);
+        String leaf = vfs::entryBaseName(entry.name());
+        if (!leaf.length() || leaf == "." || leaf == "..") {
+            entry.close();
+            continue;
+        }
+        if (entry.isDirectory()) leaf += "/";
+        entries.push_back(leaf);
         entry.close();
     }
     dir.close();
-    const int pick = ui::selectFromList(entries, path);
-    if (pick <= 0) return;
+
+    const int pick = ui::selectFromList(entries, dirPath.c_str());
+    if (pick < 0) return;
+    if (pick == 0) {
+        if (dirPath == "/") return;
+        const int slash = dirPath.lastIndexOf('/');
+        if (slash <= 0) {
+            showFileExplorer("/");
+        } else {
+            showFileExplorer(dirPath.substring(0, slash).c_str());
+        }
+        return;
+    }
     String chosen = entries[pick];
     if (chosen.endsWith("/")) {
-        showFileExplorer((String(path) + "/" + chosen.substring(0, chosen.length() - 1)).c_str());
+        chosen.remove(chosen.length() - 1);
+        showFileExplorer(vfs::joinPath(dirPath, chosen).c_str());
     } else {
-        ui::showMessage("File", chosen);
+        ui::showMessage("File", vfs::joinPath(dirPath, chosen));
     }
 }
 
@@ -224,7 +258,7 @@ void LauncherMenu::runMainLoop() {
                 ui::showMessage("Exported", "Catalog on USB serial", TFT_GREEN, 900);
                 break;
             case 5:
-                showFileExplorer(vfs::kHomeDefaultDir);
+                showFileExplorer("/");
                 break;
             case 6:
                 showThemeMenu();

@@ -11,24 +11,69 @@ namespace m5os::vfs {
 
 namespace {
 
+bool g_sdMounted = false;
+String g_lastMountError;
+
+// Cardputer display uses SPI3 (lgfx). SD must use FSPI (SPI2 on ESP32-S3), not HSPI.
 SPIClass& sdSpiBus() {
-    static SPIClass bus(HSPI);
+    static SPIClass bus(FSPI);
     static bool begun = false;
     if (!begun) {
+        pinMode(kSdCsPin, OUTPUT);
+        digitalWrite(kSdCsPin, HIGH);
         bus.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
         begun = true;
     }
     return bus;
 }
 
-bool trySdMount() {
-    SPIClass& bus = sdSpiBus();
-    const uint32_t speeds[] = {25000000, 10000000, 4000000};
-    for (uint32_t hz : speeds) {
-        if (SD.begin(kSdCsPin, bus, hz)) return true;
-        SD.end();
-        delay(20);
+const char* cardTypeLabel(uint8_t cardType) {
+    switch (cardType) {
+        case CARD_MMC:
+            return "MMC";
+        case CARD_SD:
+            return "SDSC";
+        case CARD_SDHC:
+            return "SDHC";
+        default:
+            return "NONE";
     }
+}
+
+bool trySdMountOnce(uint32_t hz, String* failDetail) {
+    SPIClass& bus = sdSpiBus();
+    if (SD.begin(kSdCsPin, bus, hz)) {
+        const uint8_t cardType = SD.cardType();
+        if (cardType == CARD_NONE) {
+            SD.end();
+            if (failDetail) *failDetail = "no_card_type@" + String(hz);
+            return false;
+        }
+        const uint64_t mb = SD.cardSize() / (1024ULL * 1024ULL);
+        log::info("sd_mounted", String(cardTypeLabel(cardType)) + " " + String(mb) + "MB@" + String(hz));
+        return true;
+    }
+    SD.end();
+    if (failDetail) *failDetail = "begin_fail@" + String(hz);
+    return false;
+}
+
+bool trySdMount() {
+    const uint32_t speeds[] = {25000000, 10000000, 4000000};
+    constexpr uint8_t kRounds = 4;
+    String lastDetail;
+
+    SD.end();
+    for (uint8_t round = 0; round < kRounds; ++round) {
+        if (round > 0) delay(150);
+        for (uint32_t hz : speeds) {
+            if (trySdMountOnce(hz, &lastDetail)) return true;
+            log::info("sd_mount_retry", lastDetail);
+            SD.end();
+            delay(40);
+        }
+    }
+    log::info("sd_mount_failed", lastDetail.length() ? lastDetail : "all_attempts");
     return false;
 }
 
@@ -60,6 +105,28 @@ void writeMarker(const char* path) {
 }
 
 }  // namespace
+
+bool isMounted() { return g_sdMounted; }
+
+String lastMountError() { return g_lastMountError; }
+
+String entryBaseName(const String& name) {
+    const int slash = max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+    return slash >= 0 ? name.substring(slash + 1) : name;
+}
+
+String joinPath(const String& parent, const String& segment) {
+    String leaf = entryBaseName(segment);
+    leaf.trim();
+    if (!leaf.length() || leaf == "." || leaf == ".." || leaf.indexOf('/') >= 0 || leaf.indexOf('\\') >= 0) {
+        return parent;
+    }
+    if (leaf.length() > 96) return parent;
+    if (!parent.length() || parent == "/") return String("/") + leaf;
+    String base = parent;
+    if (base.endsWith("/")) base.remove(base.length() - 1);
+    return base + "/" + leaf;
+}
 
 String slugFromName(const String& name) {
     String slug = name;
@@ -114,10 +181,15 @@ bool ensureAppDirs(const String& appSlug) {
 
 MountResult mountAndInit() {
     MountResult result;
-    delay(50);
+    g_sdMounted = false;
+    g_lastMountError = "";
+    SD.end();
+    // Let microSD power stabilize after M5Cardputer.begin().
+    delay(250);
     if (!trySdMount()) {
-        result.message = "SD card missing";
-        log::info("sd_missing");
+        result.message = "No FAT32 SD detected";
+        g_lastMountError = result.message;
+        log::info("sd_missing", result.message);
         return result;
     }
 
@@ -128,7 +200,9 @@ MountResult mountAndInit() {
     for (const char* dir : tree) {
         if (!mkdirChain(dir)) {
             result.message = String("Cannot create ") + dir;
+            g_lastMountError = result.message;
             log::info("vfs_mkdir_fail", dir);
+            SD.end();
             return result;
         }
     }
@@ -144,6 +218,8 @@ MountResult mountAndInit() {
 
     result.ok = true;
     result.message = "SD mounted";
+    g_sdMounted = true;
+    g_lastMountError = "";
     log::info("vfs_ready");
     return result;
 }

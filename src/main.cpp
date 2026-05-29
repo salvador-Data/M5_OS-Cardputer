@@ -24,14 +24,15 @@ void setup() {
     m5os::log::begin();
     m5os::begin();
 
-    // Mount SD before boot splash redraws (dedicated HSPI — display uses SPI3).
+    // Mount SD before boot splash (FSPI/SPI2 — display uses SPI3 via lgfx).
     const bool sdOk = gCatalog.ensureStorage();
     m5os::ui::bootIntroBegin();
 
     if (!sdOk) {
-        m5os::ui::bootIntroStage(m5os::ui::BootStage::MountSd, "SD missing");
+        m5os::log::info("boot_sd_offline", "Menu available; apps need FAT32 SD");
+        m5os::ui::bootIntroStage(m5os::ui::BootStage::MountSd, "SD offline");
         m5os::ui::bootIntroFinish();
-        m5os::ui::showMessage("Error", "Insert FAT32 SD\n/system /apps /home", TFT_RED, 3200);
+        m5os::ui::showMessage("SD offline", "Insert FAT32 SD\nMenu works without it", TFT_YELLOW, 1500);
     } else {
         m5os::ui::bootIntroStage(m5os::ui::BootStage::MountSd, "VFS ready");
 

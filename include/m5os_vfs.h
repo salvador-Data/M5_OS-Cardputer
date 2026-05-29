@@ -28,6 +28,18 @@ struct MountResult {
     String message;
 };
 
+/** True after a successful mountAndInit() until SD.end() or mount failure. */
+bool isMounted();
+
+/** Last mountAndInit() failure detail (empty when mounted). */
+String lastMountError();
+
+/** Basename of an SD entry name (strips VFS/full path prefixes). */
+String entryBaseName(const String& name);
+
+/** Join parent VFS path with a single path segment (no traversal). */
+String joinPath(const String& parent, const String& segment);
+
 /** Mount SD and create the OS directory tree. */
 MountResult mountAndInit();
 
