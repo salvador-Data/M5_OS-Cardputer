@@ -57,6 +57,10 @@ void LauncherMenu::exportCatalogSerial() {
 }
 
 void LauncherMenu::showInstalledApps() {
+    if (!settings::ensureSdMounted()) {
+        showSdRequired("Launch needs SD");
+        return;
+    }
     catalog_.scanInstalled();
     std::vector<String> labels;
     for (const auto& pkg : catalog_.installed()) {

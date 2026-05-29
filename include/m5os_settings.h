@@ -25,4 +25,8 @@ bool exportSettingsSnapshot(String* outPath = nullptr);
 int themePreset();
 const char* themePresetName(int preset);
 
+/** Loaded from settings.json (empty until load()). */
+String savedWifiSsid();
+String savedWifiPass();
+
 }  // namespace m5os::settings

@@ -42,6 +42,7 @@ void setup() {
 
         if (m5os::settings::load()) {
             m5os::ui::setThemePreset(m5os::settings::themePreset());
+            m5os::wifiTrySavedConnect();
         }
 
         gCatalog.scanInstalled();

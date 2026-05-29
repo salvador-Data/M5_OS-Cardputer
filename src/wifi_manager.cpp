@@ -13,6 +13,25 @@ namespace m5os {
 
 bool wifiIsConnected() { return WiFi.status() == WL_CONNECTED; }
 
+bool wifiTrySavedConnect() {
+    const String ssid = settings::savedWifiSsid();
+    if (!ssid.length()) return false;
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid.c_str(), settings::savedWifiPass().c_str());
+    uint8_t tries = 0;
+    while (WiFi.status() != WL_CONNECTED && tries < 12) {
+        delay(500);
+        tries++;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+        if (power::isSaving()) WiFi.setSleep(WIFI_PS_MIN_MODEM);
+        log::info("wifi_saved_connect", wifiIpAddress());
+        return true;
+    }
+    log::info("wifi_saved_fail", ssid);
+    return false;
+}
+
 String wifiIpAddress() {
     if (!wifiIsConnected()) return "";
     return WiFi.localIP().toString();
@@ -45,12 +64,13 @@ bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t
         delay(500);
         tries++;
     }
-    passOut[0] = '\0';
     if (WiFi.status() == WL_CONNECTED) {
         if (power::isSaving()) WiFi.setSleep(WIFI_PS_MIN_MODEM);
         log::info("wifi_connected", wifiIpAddress());
         String body = wifiIpAddress();
-        if (settings::saveWifi(ssidOut, passOut)) {
+        const bool saved = settings::saveWifi(ssidOut, passOut);
+        passOut[0] = '\0';
+        if (saved) {
             body += "\nSaved to\n" + String(vfs::kSettingsPath);
             ui::showMessage("WiFi", body, TFT_GREEN, 2000);
         } else {
@@ -59,6 +79,7 @@ bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t
         }
         return true;
     }
+    passOut[0] = '\0';
     log::info("wifi_failed");
     ui::showMessage("Error", "WiFi connect failed", TFT_RED);
     return false;

@@ -175,4 +175,8 @@ const char* themePresetName(int preset) {
     return names[preset];
 }
 
+String savedWifiSsid() { return gWifiSsid; }
+
+String savedWifiPass() { return gWifiPass; }
+
 }  // namespace m5os::settings
