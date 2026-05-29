@@ -25,7 +25,7 @@ constexpr char kLaunchNs[] = "m5os_launch";
 constexpr char kLastBinKey[] = "last_bin";
 constexpr char kLastShaKey[] = "last_sha";
 
-bool tryBootCachedOta(const String& binFile, const String& sha256) {
+bool canSkipFlashToCachedOta(const String& binFile, const String& sha256) {
     if (!sha256.length()) return false;
 
     Preferences prefs;
@@ -36,14 +36,13 @@ bool tryBootCachedOta(const String& binFile, const String& sha256) {
 
     if (lastBin != binFile || !security::sha256Equal(lastSha, sha256)) return false;
 
-    const esp_partition_t* updatePart = esp_ota_get_next_update_partition(nullptr);
-    if (!updatePart) return false;
+    const esp_partition_t* staging = stagingOtaPartition();
+    if (!staging) return false;
 
     esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
-    if (esp_ota_get_state_partition(updatePart, &state) != ESP_OK) return false;
+    if (esp_ota_get_state_partition(staging, &state) != ESP_OK) return false;
     if (state != ESP_OTA_IMG_VALID && state != ESP_OTA_IMG_PENDING_VERIFY) return false;
 
-    if (esp_ota_set_boot_partition(updatePart) != ESP_OK) return false;
     log::info("launch_skip_flash", binFile);
     return true;
 }
@@ -68,7 +67,12 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         log::info("launch_bin_rejected");
         return result;
     }
-    const String path = catalog_.binPathFor(safeBin);
+    String path;
+    if (const FirmwarePackage* meta = catalog_.findByBinFile(safeBin)) {
+        path = catalog_.binPathForPackage(*meta);
+    } else {
+        path = catalog_.binPathFor(safeBin);
+    }
     if (!path.length() || !SD.exists(path.c_str())) {
         result.message = "Missing " + safeBin;
         log::info("launch_missing", path);
@@ -111,7 +115,7 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     ui::showFlashProgress(0, "Launch app", safeBin + "\nSD -> run slot");
     m5os::update();
 
-    if (tryBootCachedOta(safeBin, sdDigest)) {
+    if (canSkipFlashToCachedOta(safeBin, sdDigest)) {
         ui::showFlashProgress(100, "Launch app", safeBin + "\nAlready loaded — reboot");
         result.ok = true;
         result.skippedFlash = true;

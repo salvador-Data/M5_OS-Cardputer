@@ -60,6 +60,7 @@ void LauncherMenu::exportCatalogSerial() {
 }
 
 void LauncherMenu::showAppSwitcher() {
+    m5os::keyboardDrainBack();
     if (!settings::ensureSdMounted()) {
         showSdRequired("Switch app needs SD");
         return;
@@ -140,6 +141,7 @@ void LauncherMenu::showAppSwitcher() {
             m5os::lcd().setCursor(4, 78);
             m5os::lcd().print("ESC/` confirm back");
 
+            m5os::keyboardDrainBack();
             while (true) {
                 m5os::update();
                 if (m5os::keyboardBackJustPressed()) break;

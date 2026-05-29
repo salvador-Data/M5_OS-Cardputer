@@ -52,6 +52,19 @@ inline bool keyboardBackJustPressed() {
     return keyboardBackHeld();
 }
 
+/** Drop ESC/` held from a prior screen (e.g. main menu back opens switcher). */
+inline void keyboardDrainBack() {
+    for (int i = 0; i < 24; ++i) {
+        update();
+        if (!M5Cardputer.Keyboard.isChange() && !keyboardBackHeld()) break;
+        delay(5);
+    }
+    while (keyboardBackHeld()) {
+        update();
+        delay(10);
+    }
+}
+
 inline Buttons readButtons() {
     Buttons b;
     if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) {
