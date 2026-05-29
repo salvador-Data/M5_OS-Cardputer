@@ -22,8 +22,9 @@ def test_refresh_catalog_merges_burner_hub() -> None:
     assert "refreshFromBurnerHub" in text
 
 
-def test_flash_from_m5burner_catalog_menu_item() -> None:
+def test_load_from_m5burner_catalog_menu_item() -> None:
     text = MENU_CPP.read_text(encoding="utf-8")
-    assert "Flash from M5Burner catalog" in text
+    assert "Load from M5Burner catalog" in text
+    assert "Load from catalog" in text
     assert "showFlashBurnerCatalog" in text
     assert "flashBurnerPackage" in text

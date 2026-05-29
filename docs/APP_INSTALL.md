@@ -20,7 +20,7 @@ This guide explains how to add **Remote Possibility**, **BLE Bot**, and other Ca
 
 - It does **not** keep Hacker Planet apps on SD while preserving M5 OS in flash — a full flash **replaces everything** in the app partition
 - It does **not** use our `/apps/manifest.json` catalog or SHA256 whitelist
-- Official third-party M5Burner CDN URLs were previously blocked — M5 OS now allows **LauncherHub** and **M5Burner CDN** for Boris-style discovery/download and **on-device OTA flash** (apps also saved to SD)
+- Official third-party M5Burner CDN URLs were previously blocked — M5 OS now allows **LauncherHub** and **M5Burner CDN** for Boris-style discovery/download and **on-device OTA load** (apps also saved to SD)
 
 **Rule of thumb:** M5Burner = **base OS once** (+ recovery). M5 OS menu = **apps on SD**.
 
@@ -40,7 +40,7 @@ M5 OS launcher  ←── reflash to return   /apps/manifest.json
    - **Wi-Fi:** Menu → **Refresh manifest** → **Load from catalog**
    - **Offline:** Copy `.bin` to SD (see paths below)
    - **PC helper:** `python scripts/import_m5burner_entry.py --bin … --name … --merge data/manifest.example.json`
-3. **Switch / run app:** Menu → **Switch app (ESC/`)** → pick app → **Enter flash app slot**
+3. **Switch / run app:** Menu → **Switch app (ESC/`)** → pick app → **Enter run slot**
 4. **Return to M5 OS:** Hold **ESC/` (backtick) at power-on** for recovery boot, or USB reflash M5 OS (PlatformIO or M5Burner). App `.bin` files **stay on SD**.
 
 Launching an app writes the SD `.bin` into the ESP32 OTA slot and reboots. M5 OS is no longer in flash until you reflash or use recovery boot — but you do **not** re-load apps from GitHub.
@@ -77,7 +77,7 @@ Insert **FAT32** microSD (contacts away from screen). Boot should show **VFS rea
 1. Menu → **WiFi setup** → connect
 2. **Refresh manifest** (loads Hacker Planet manifest + merges LauncherHub `category=cardputer`)
 3. Either:
-   - **Flash from M5Burner catalog** → pick firmware → saves to SD (SPIFFS/composite apps **do not auto-reboot** — M5 OS stays active)
+   - **Load from M5Burner catalog** → pick firmware → saves to SD (SPIFFS/composite apps **do not auto-reboot** — M5 OS stays active)
    - **Load from catalog** → save `.bin` to SD only
 4. **Switch app (ESC/`)** to launch from SD without Wi-Fi
 
@@ -113,10 +113,10 @@ Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub o
 | Control | Detail |
 |---------|--------|
 | HTTPS whitelist | Downloads from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, `hackerplanet.dev`, `api.launcherhub.net`, `m5burner-cdn.m5stack.com` |
-| SHA256 | Optional per manifest entry; verified on download and before flash |
+| SHA256 | Optional per manifest entry; verified on download and before load to run slot |
 | Size limit | App bins capped at **~3.94 MiB** (`kMaxAppBinBytes` = 0x3F0000) — matches `partitions/m5os_cardputer_8MB.csv` OTA slot |
 | Path safety | No `..` or slashes in bin names; slugs sanitized |
-| Launch confirm | User must confirm before any OTA write; failed flash leaves launcher intact |
+| Launch confirm | User must confirm before any OTA write; failed load leaves launcher intact |
 | No partition-0 flash | M5 OS never writes bootloader/partition table from the menu — USB/M5Burner only |
 
 Validate before publishing:
@@ -145,7 +145,7 @@ You do **not** re-flash base when adding, updating, or deleting app `.bin` files
 | SD manifest + Wi-Fi download + launch | **Shipped** |
 | SHA256 + HTTPS whitelist + size cap | **Shipped** |
 | On-device M5Burner online catalog (LauncherHub hookup) | **Shipped** — `Refresh manifest` merges Hacker Planet manifest + Boris LauncherHub `category=cardputer` list |
-| On-device M5Burner OTA flash (Boris `installFirmwareFromManifest` app slice) | **Shipped** — **Flash from M5Burner catalog**; HTTP Range via `api.launcherhub.net/download?fid=…&file=…`; skips bootloader offset (`ao`/`source_offset`); saves app copy to SD |
+| On-device M5Burner OTA load (Boris `installFirmwareFromManifest` app slice) | **Shipped** — **Load from M5Burner catalog**; HTTP Range via `api.launcherhub.net/download?fid=…&file=…`; skips bootloader offset (`ao`/`source_offset`); saves app copy to SD |
 | Host M5Burner cache import | **Shipped** (`scripts/import_m5burner_entry.py` — `--fid`, `--file`, `--burner-cache`, Windows `%LOCALAPPDATA%\M5Burner\packages\fw\…`) |
 | Dual-partition launcher (return without USB, like bmorcelli Launcher) | Roadmap — requires custom `partitions.csv` |
 | WebUI OTA upload from phone/PC | Roadmap |
@@ -160,7 +160,7 @@ M5 OS persists user choices on the FAT32 microSD. If the card is missing or moun
 | Theme (Baby Blue, Hacker Green, etc.) | **Theme** | `/home/default/settings.json` (`theme`: 0–3) |
 | Wi-Fi SSID + password (lab use) | **WiFi setup** → connect | Same file (`wifi.ssid`, `wifi.pass`) — **plaintext on SD** |
 | App `.bin` from catalog | **Download from catalog** | `/apps/<slug>/<app>.bin` |
-| App flash from M5Burner/LauncherHub | **Flash from M5Burner catalog** | OTA slot + copy to `/apps/<slug>/` |
+| App load from M5Burner/LauncherHub | **Load from M5Burner catalog** | OTA slot + copy to `/apps/<slug>/` |
 | Manifest (offline) | Copy from PC | `/apps/manifest.json` |
 | Per-app data | (apps write at runtime) | `/home/default/apps/<slug>/` |
 | Log export snapshot | **Save / export to SD** → Export log | `/home/default/saves/log_export_<ms>.txt` |

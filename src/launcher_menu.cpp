@@ -203,11 +203,11 @@ void LauncherMenu::showLoadCatalog() {
 
 void LauncherMenu::showFlashBurnerCatalog() {
     if (!settings::ensureSdMounted()) {
-        showSdRequired("Flash saves app to SD");
+        showSdRequired("Load saves app to SD");
         return;
     }
     if (!wifiIsConnected()) {
-        ui::showMessage("M5Burner flash", "WiFi required", TFT_RED);
+        ui::showMessage("M5Burner load", "WiFi required", TFT_RED);
         return;
     }
 
@@ -216,7 +216,7 @@ void LauncherMenu::showFlashBurnerCatalog() {
         if (pkg.fid.length()) burnerEntries.push_back(pkg);
     }
     if (burnerEntries.empty()) {
-        ui::showMessage("M5Burner flash", "Refresh manifest first\n(no LauncherHub entries)", TFT_YELLOW);
+        ui::showMessage("M5Burner load", "Refresh manifest first\n(no LauncherHub entries)", TFT_YELLOW);
         return;
     }
 
@@ -227,7 +227,7 @@ void LauncherMenu::showFlashBurnerCatalog() {
         if (pkg.installed) line += " [SD]";
         labels.push_back(line);
     }
-    const int pick = ui::selectFromList(labels, "M5Burner flash");
+    const int pick = ui::selectFromList(labels, "M5Burner catalog");
     if (pick < 0) return;
 
     const FirmwarePackage& pkg = burnerEntries[pick];
@@ -245,7 +245,7 @@ void LauncherMenu::showFlashBurnerCatalog() {
         version = versions[0].version;
     }
 
-    ui::drawHeader("M5Burner flash");
+    ui::drawHeader("M5Burner catalog");
     m5os::lcd().setCursor(4, 28);
     m5os::lcd().println(pkg.name);
     m5os::lcd().setCursor(4, 44);
@@ -266,7 +266,7 @@ void LauncherMenu::showFlashBurnerCatalog() {
             if (result.ok) {
                 ui::showMessage("M5Burner", result.message, TFT_GREEN, 2600);
             } else {
-                ui::showMessage("Flash failed", result.message, TFT_RED);
+                ui::showMessage("Load failed", result.message, TFT_RED);
             }
             return;
         }
@@ -437,7 +437,7 @@ void LauncherMenu::runMainLoop() {
         "WiFi setup",
         "Switch app (ESC/`)",
         "Load from catalog",
-        "Flash from M5Burner catalog",
+        "Load from M5Burner catalog",
         "Refresh manifest",
         "Storage cleanup",
         "Export catalog (serial)",

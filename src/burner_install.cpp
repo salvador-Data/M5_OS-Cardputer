@@ -287,7 +287,7 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
 }
 
 bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut,
-                      int* httpCodeOut = nullptr, const char* progressLabel = "Flashing app",
+                      int* httpCodeOut = nullptr, const char* progressLabel = "Loading app",
                       const char* detailLine = nullptr) {
     if (!security::isAllowedHttpsUrl(url)) return false;
     if (imageSize == 0 || imageSize > maxOtaAppBytes()) return false;
@@ -511,24 +511,24 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
     const String flashDetail =
         (plan.version.length() ? plan.version : plan.file) + "\nApp " + String(plan.appSize) +
         " bytes";
-    ui::showFlashProgress(0, "M5Burner flash", flashDetail);
+    ui::showFlashProgress(0, "M5Burner load", flashDetail);
     m5os::update();
 
     const uint32_t offset = plan.noBootloader ? 0 : plan.appOffset;
     int flashHttpCode = 0;
     const bool ok =
         streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr,
-                         &flashHttpCode, "Flashing app", flashDetail.c_str());
+                         &flashHttpCode, "Loading app", flashDetail.c_str());
     if (sdOut) sdOut.close();
 
     if (!ok) {
         if (sdPath.length()) SD.remove(sdPath.c_str());
         if (WiFi.status() != WL_CONNECTED) {
-            result.message = "WiFi lost during flash";
+            result.message = "WiFi lost during load";
         } else if (flashHttpCode > 0) {
-            result.message = formatHttpStageError("Flash HTTP", flashHttpCode);
+            result.message = formatHttpStageError("Load HTTP", flashHttpCode);
         } else {
-            result.message = "Flash failed — launcher intact";
+            result.message = "Load failed — launcher intact";
         }
         return result;
     }
@@ -538,7 +538,7 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
                          ? "Staged on SD. Launch from Apps menu to run."
                          : "Staged in OTA slot. Launch from Apps menu to run.";
     log::info("burner_flash_ok", plan.version);
-    ui::showFlashProgress(100, "M5Burner flash", result.message);
+    ui::showFlashProgress(100, "M5Burner load", result.message);
     ui::showMessage("M5Burner", result.message, TFT_GREEN, 2200);
     return result;
 }

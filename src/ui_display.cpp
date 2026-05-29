@@ -1066,7 +1066,7 @@ void drawBurnerHelp() {
     d.println("4. Flash M5 OS base .bin");
     d.setTextColor(TFT_DARKGREY, TFT_BLACK);
     d.setCursor(4, 96);
-    d.println("Or: Flash from M5Burner catalog");
+    d.println("Or: Load from M5Burner catalog");
     d.setCursor(4, 110);
     d.println("Apps stay on SD /apps/");
     d.setCursor(4, 118);
