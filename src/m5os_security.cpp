@@ -1,5 +1,7 @@
 #include "m5os_security.h"
 
+#include "m5os_watchdog.h"
+
 #include <mbedtls/sha256.h>
 
 namespace m5os::security {
@@ -112,14 +114,15 @@ String computeFileSha256HexWithProgress(File& file, size_t totalBytes,
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
     mbedtls_sha256_starts(&ctx, 0);
-    uint8_t buffer[512];
+    uint8_t buffer[64];
     size_t hashed = 0;
     while (file.available()) {
         const size_t n = file.read(buffer, sizeof(buffer));
         if (!n) break;
         mbedtls_sha256_update(&ctx, buffer, n);
         hashed += n;
-        if (progress && (hashed == n || hashed % 512 == 0 || !file.available())) {
+        feedWatchdog();
+        if (progress && (hashed == n || hashed % 64 == 0 || !file.available())) {
             progress(hashed, totalBytes);
         }
     }

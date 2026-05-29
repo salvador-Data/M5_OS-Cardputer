@@ -345,7 +345,36 @@ void LauncherMenu::showFileExplorer(const char* path) {
         chosen.remove(chosen.length() - 1);
         showFileExplorer(vfs::joinPath(dirPath, chosen).c_str());
     } else {
-        ui::showMessage("File", vfs::joinPath(dirPath, chosen));
+        const String fullPath = vfs::joinPath(dirPath, chosen);
+        if (chosen.endsWith(".bin")) {
+            ui::drawHeader("Load app");
+            m5os::lcd().setCursor(4, 28);
+            m5os::lcd().println(chosen);
+            m5os::lcd().setCursor(4, 44);
+            m5os::lcd().println(fullPath);
+            m5os::lcd().setCursor(4, 64);
+            m5os::lcd().print("Enter copy to run slot");
+            m5os::lcd().setCursor(4, 78);
+            m5os::lcd().print("ESC/` back");
+
+            m5os::keyboardDrainBack();
+            m5os::keyboardDrainEnter();
+            while (true) {
+                m5os::update();
+                if (m5os::keyboardBackJustPressed()) break;
+                if (m5os::keyboardEnterJustPressed()) {
+                    ui::showFlashProgress(0, "Load app", chosen + "\nStarting...");
+                    m5os::update();
+                    LaunchResult result = launcher_.launchBinPath(fullPath);
+                    if (!result.ok) ui::showMessage("Load app failed", result.message, TFT_RED);
+                    return;
+                }
+                delay(power::uiLoopDelayMs());
+            }
+            showFileExplorer(dirPath.c_str());
+            return;
+        }
+        ui::showMessage("File", fullPath);
     }
 }
 

@@ -11,7 +11,7 @@ DEVICE_H = ROOT / "include" / "M5OSDevice.h"
 def test_switch_launch_resolves_package_slug_path():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
     fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
-        "LaunchResult AppLauncher::flashBurnerPackage"
+        "LaunchResult AppLauncher::launchBinPath"
     )]
     assert "findByBinFile(safeBin)" in fn
     assert "binPathForPackage(*meta)" in fn
@@ -59,21 +59,71 @@ def test_keyboard_enter_helpers():
 
 def test_launch_blocks_spiffs_apps():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
-    fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
-        "LaunchResult AppLauncher::flashBurnerPackage"
+    helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
+        "AppLauncher::AppLauncher"
     )]
-    assert "needsFlashSpiffs" in fn
-    assert "launch_spiffs_blocked" in fn
+    assert "needsFlashSpiffs" in helper
+    assert "launch_spiffs_blocked" in helper
+
+
+def test_launch_shows_starting_before_hash():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
+        "LaunchResult AppLauncher::launchBinPath"
+    )]
+    helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
+        "AppLauncher::AppLauncher"
+    )]
+    assert "Starting..." in helper
+    assert helper.index("Starting...") < helper.index("computeFileSha256HexWithProgress")
+    assert "tryLoadCachedDigest" in helper
+    assert "launch_hash_skip" in helper
+
+
+def test_launch_uses_64_byte_io_chunks():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    assert "kIoChunkBytes = 64" in text
+    copy = text[text.index("bool copySdToOta") : text.index("LaunchResult launchFromOpenFile")]
+    assert "feedWatchdog()" in copy
+    assert "written % kIoChunkBytes" in copy
+    sec = (ROOT / "src" / "m5os_security.cpp").read_text(encoding="utf-8")
+    hash_fn = sec[sec.index("String computeFileSha256HexWithProgress") : sec.index("bool sha256Equal")]
+    assert "buffer[64]" in hash_fn
+    assert "feedWatchdog()" in hash_fn
+    assert "hashed % 64" in hash_fn
+
+
+def test_launch_bin_path_for_explorer():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    assert "LaunchResult AppLauncher::launchBinPath" in text
+    menu = LAUNCHER_CPP.read_text(encoding="utf-8")
+    explorer = menu[menu.index("void LauncherMenu::showFileExplorer") : menu.index(
+        "void LauncherMenu::showThemeMenu"
+    )]
+    assert "launchBinPath" in explorer
+    assert ".bin" in explorer
 
 
 def test_launch_shows_progress_before_hash():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
-    fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
-        "LaunchResult AppLauncher::flashBurnerPackage"
+    helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
+        "AppLauncher::AppLauncher"
     )]
-    assert fn.index("showFlashProgress") < fn.index("computeFileSha256HexWithProgress")
-    assert "Hashing" in fn
-    assert "copySdToOta" in fn
+    assert helper.index("showFlashProgress") < helper.index("computeFileSha256HexWithProgress")
+    assert "Hashing" in helper
+    assert "copySdToOta" in text
+
+
+def test_launch_reopens_sd_file_after_hash():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
+        "AppLauncher::AppLauncher"
+    )]
+    assert "Cannot reopen bin for copy" in helper
+    assert "launch_reopen_fail" in helper
+    reopen = helper[helper.index("firmware.close();") : helper.index("copySdToOta")]
+    assert reopen.count("SD.open(path") >= 1
+    assert "launch_magic_fail" in text
 
 
 def test_switcher_shows_progress_before_launch():
@@ -87,18 +137,6 @@ def test_switcher_shows_progress_before_launch():
     confirm_block = switcher[launch_idx - 200 : launch_idx + 80]
     assert "showFlashProgress" in confirm_block
     assert confirm_block.index("showFlashProgress") < confirm_block.index("launchBinFile")
-
-
-def test_launch_reopens_sd_file_after_hash():
-    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
-    fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
-        "LaunchResult AppLauncher::flashBurnerPackage"
-    )]
-    assert "Cannot reopen bin for copy" in fn
-    assert "launch_reopen_fail" in fn
-    reopen = fn[fn.index("firmware.close();") : fn.index("copySdToOta")]
-    assert reopen.count("SD.open(path") >= 1
-    assert "launch_magic_fail" in text
 
 
 def test_show_message_feeds_watchdog():

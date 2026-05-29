@@ -5,6 +5,7 @@
 #include "M5OSDevice.h"
 #include "m5os_flash.h"
 #include "m5os_security.h"
+#include "m5os_watchdog.h"
 #include "serial_log.h"
 #include "ui_display.h"
 
@@ -24,6 +25,7 @@ constexpr uint32_t kDownloadHttpTimeoutMs = 60000;
 constexpr uint32_t kStreamIdleMinMs = 120000;
 constexpr uint32_t kStreamIdleMaxMs = 300000;
 constexpr uint8_t kHttpMaxAttempts = 3;
+constexpr size_t kStreamChunkBytes = 64;
 
 uint32_t streamIdleTimeoutMs(size_t imageSize) {
     // ~1 ms idle budget per 32 bytes — Bruce ~4 MB needs several minutes on slow WiFi.
@@ -247,8 +249,9 @@ void reportStreamProgress(size_t written, size_t total, const char* label,
     m5os::update();
 }
 
-RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t imageSize, File& out,
-                                    const char* progressLabel, const char* detailLine = nullptr) {
+RangeStreamResult streamRangeChunk(const String& url, uint32_t offset, size_t imageSize, File& out,
+                                   const char* progressLabel, const char* detailLine,
+                                   size_t progressBase, size_t progressTotal) {
     RangeStreamResult result;
     if (!security::isAllowedHttpsUrl(url)) return result;
     if (imageSize == 0) return result;
@@ -266,12 +269,17 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
         return result;
     }
 
+    const int headerLen = http.getSize();
+    if (headerLen > 0 && static_cast<size_t>(headerLen) != imageSize) {
+        log::info("burner_len_mismatch", String(headerLen) + "/" + String(imageSize));
+    }
+
     WiFiClient* stream = http.getStreamPtr();
     size_t written = 0;
     size_t lastPainted = SIZE_MAX;
-    uint8_t buffer[512];
+    uint8_t buffer[kStreamChunkBytes];
     uint32_t idleMs = 0;
-    reportStreamProgress(0, imageSize, progressLabel, detailLine, &lastPainted);
+    reportStreamProgress(progressBase, progressTotal, progressLabel, detailLine, &lastPainted);
     const uint32_t idleLimitMs = streamIdleTimeoutMs(imageSize);
     while (written < imageSize) {
         if (WiFi.status() != WL_CONNECTED) break;
@@ -280,7 +288,10 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
             if (!stream->connected() && !stream->available()) break;
             delay(1);
             idleMs += 1;
-            if (idleMs % 16 == 0) m5os::update();
+            if (idleMs % 16 == 0) {
+                m5os::update();
+                feedWatchdog();
+            }
             if (idleMs > idleLimitMs) break;
             continue;
         }
@@ -294,18 +305,60 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
             return result;
         }
         written += static_cast<size_t>(read);
-        reportStreamProgress(written, imageSize, progressLabel, detailLine, &lastPainted);
+        feedWatchdog();
+        reportStreamProgress(progressBase + written, progressTotal, progressLabel, detailLine,
+                             &lastPainted);
     }
     http.end();
     result.written = written;
     result.ok = written == imageSize;
-    if (!result.ok) log::info("burner_incomplete", String(written));
+    if (!result.ok) log::info("burner_incomplete", String(written) + "/" + String(imageSize));
     return result;
 }
 
-bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut,
-                      int* httpCodeOut = nullptr, const char* progressLabel = "Loading app",
-                      const char* detailLine = nullptr) {
+RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t imageSize, File& out,
+                                    const char* progressLabel, const char* detailLine = nullptr) {
+    RangeStreamResult result;
+    if (!out) return result;
+
+    size_t totalWritten = 0;
+    uint32_t remoteOffset = offset;
+    size_t remaining = imageSize;
+
+    for (uint8_t attempt = 0; attempt < kHttpMaxAttempts && remaining > 0; ++attempt) {
+        if (totalWritten > 0 && !out.seek(totalWritten)) {
+            log::info("burner_sd_seek_fail", String(totalWritten));
+            break;
+        }
+        const RangeStreamResult chunk =
+            streamRangeChunk(url, remoteOffset, remaining, out, progressLabel, detailLine,
+                             totalWritten, imageSize);
+        result.httpCode = chunk.httpCode;
+        totalWritten += chunk.written;
+        remoteOffset += static_cast<uint32_t>(chunk.written);
+        remaining -= chunk.written;
+        if (chunk.ok) {
+            result.ok = true;
+            result.written = totalWritten;
+            return result;
+        }
+        if (chunk.written == 0) {
+            delay(400 * (attempt + 1));
+            continue;
+        }
+        out.flush();
+        delay(400 * (attempt + 1));
+    }
+
+    result.written = totalWritten;
+    result.ok = totalWritten == imageSize;
+    if (!result.ok) log::info("burner_incomplete", String(totalWritten) + "/" + String(imageSize));
+    return result;
+}
+
+bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, File* sdOut,
+                          int* httpCodeOut, const char* progressLabel, const char* detailLine,
+                          RangeFlashContext& ctx) {
     if (!security::isAllowedHttpsUrl(url)) return false;
     if (imageSize == 0 || imageSize > maxOtaAppBytes()) return false;
 
@@ -322,12 +375,19 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
         return false;
     }
 
+    const int headerLen = http.getSize();
+    if (headerLen > 0 && static_cast<size_t>(headerLen) != imageSize) {
+        log::info("burner_len_mismatch", String(headerLen) + "/" + String(imageSize));
+    }
+
     WiFiClient* stream = http.getStreamPtr();
-    RangeFlashContext ctx;
     ctx.expected = imageSize;
     ctx.sdOut = sdOut;
+    if (ctx.updateStarted) Update.abort();
+    ctx.updateStarted = false;
+    ctx.written = 0;
 
-    uint8_t buffer[512];
+    uint8_t buffer[kStreamChunkBytes];
     uint32_t idleMs = 0;
     size_t lastPainted = SIZE_MAX;
     reportStreamProgress(0, imageSize, progressLabel, detailLine, &lastPainted);
@@ -339,7 +399,10 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
             if (!stream->connected() && !stream->available()) break;
             delay(1);
             idleMs += 1;
-            if (idleMs % 16 == 0) m5os::update();
+            if (idleMs % 16 == 0) {
+                m5os::update();
+                feedWatchdog();
+            }
             if (idleMs > idleLimitMs) break;
             continue;
         }
@@ -348,17 +411,19 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
         const int read = stream->readBytes(buffer, want);
         if (read <= 0) break;
         if (!writeFlashChunk(ctx, buffer, static_cast<size_t>(read))) {
-            Update.abort();
+            if (ctx.updateStarted) Update.abort();
             http.end();
             return false;
         }
+        feedWatchdog();
         reportStreamProgress(ctx.written, imageSize, progressLabel, detailLine, &lastPainted);
     }
     http.end();
 
     if (ctx.written != imageSize) {
         if (ctx.updateStarted) Update.abort();
-        log::info("burner_incomplete", String(ctx.written));
+        ctx.updateStarted = false;
+        log::info("burner_incomplete", String(ctx.written) + "/" + String(imageSize));
         return false;
     }
     if (!Update.end(true)) {
@@ -367,6 +432,30 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
     }
     restoreBootToHome();
     return true;
+}
+
+bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut,
+                      int* httpCodeOut = nullptr, const char* progressLabel = "Loading app",
+                      const char* detailLine = nullptr) {
+    RangeFlashContext ctx;
+    ctx.sdOut = sdOut;
+    for (uint8_t attempt = 0; attempt < kHttpMaxAttempts; ++attempt) {
+        if (streamRangeToOtaOnce(url, offset, imageSize, sdOut, httpCodeOut, progressLabel,
+                                 detailLine, ctx)) {
+            return true;
+        }
+        if (ctx.updateStarted) Update.abort();
+        ctx.updateStarted = false;
+        ctx.written = 0;
+        if (sdOut && (*sdOut)) {
+            if (!sdOut->seek(0)) {
+                log::info("burner_sd_seek_fail", "0");
+                return false;
+            }
+        }
+        delay(400 * (attempt + 1));
+    }
+    return false;
 }
 
 String sdExtraPathFromApp(const String& appSdPath, const BurnerDataSlice& slice) {

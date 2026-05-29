@@ -73,7 +73,11 @@ def test_burner_streams_report_progress():
     assert "showFlashProgress" in text
     assert "reportStreamProgress" in text
     assert "streamIdleTimeoutMs" in text
-    assert "m5os::update()" in text[text.index("streamRangeToFile") : text.index("bool streamRangeToOta")]
+    chunk = text[text.index("RangeStreamResult streamRangeChunk") : text.index(
+        "RangeStreamResult streamRangeToFile"
+    )]
+    assert "m5os::update()" in chunk
+    assert "feedWatchdog()" in chunk
 
 
 def test_launcher_menu_no_auto_boot_hint():
