@@ -25,4 +25,7 @@ static const char* kDefaultManifestUrl = M5OS_MANIFEST_URL;
 static const char* kAppRemotePossibility = "remote_possibility";
 static const char* kAppBleBot = "ble_bot";
 
+/** Max app .bin size for SD download + Update flash (default_8MB OTA slot ≈ 3 MiB). */
+static const size_t kMaxAppBinBytes = 3145728;
+
 }  // namespace m5os

@@ -49,11 +49,12 @@ bool parseManifestPayload(const String& payload, std::vector<FirmwarePackage>& o
     return !out.empty();
 }
 
-String hashDownloadStream(WiFiClient* stream, File& out) {
+String hashDownloadStreamWithLimit(WiFiClient* stream, File& out, size_t maxBytes) {
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
     mbedtls_sha256_starts(&ctx, 0);
     uint8_t buffer[512];
+    size_t total = 0;
     while (stream->connected() || stream->available()) {
         const size_t available = stream->available();
         if (!available) {
@@ -62,6 +63,11 @@ String hashDownloadStream(WiFiClient* stream, File& out) {
         }
         const int read = stream->readBytes(buffer, min(available, sizeof(buffer)));
         if (read <= 0) break;
+        if (total + static_cast<size_t>(read) > maxBytes) {
+            mbedtls_sha256_free(&ctx);
+            return "";
+        }
+        total += static_cast<size_t>(read);
         out.write(buffer, read);
         mbedtls_sha256_update(&ctx, buffer, static_cast<size_t>(read));
     }
@@ -241,9 +247,14 @@ bool FirmwareCatalog::refreshFromSdManifest() {
 }
 
 bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
+    if (!vfs::isMounted() && !ensureStorage()) return false;
     if (WiFi.status() != WL_CONNECTED || !pkg.url.length()) return false;
     if (!security::isAllowedHttpsUrl(pkg.url)) {
         log::info("download_url_rejected", pkg.name);
+        return false;
+    }
+    if (pkg.size > kMaxAppBinBytes) {
+        log::info("download_size_rejected", pkg.name);
         return false;
     }
     const String safeBin = security::sanitizeBinFilename(pkg.binFile);
@@ -265,6 +276,12 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
         log::info("download_http_fail", String(code));
         return false;
     }
+    const int contentLength = http.getSize();
+    if (contentLength > 0 && static_cast<size_t>(contentLength) > kMaxAppBinBytes) {
+        http.end();
+        log::info("download_size_rejected", pkg.name);
+        return false;
+    }
     const String path = String(vfs::appDirFor(slug)) + "/" + safeBin;
     if (!path.length()) {
         http.end();
@@ -276,7 +293,7 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
         return false;
     }
     WiFiClient* stream = http.getStreamPtr();
-    const String digest = hashDownloadStream(stream, out);
+    const String digest = hashDownloadStreamWithLimit(stream, out, kMaxAppBinBytes);
     out.close();
     http.end();
     if (!digest.length()) {

@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.m5os_paths import (
+    VFS_DIRS,
     PathError,
     app_data_dir,
     app_dir,
@@ -49,6 +50,11 @@ def test_vfs_paths() -> None:
     assert app_dir("ble_bot") == "/apps/ble_bot"
     assert app_data_dir("ble_bot") == "/home/default/apps/ble_bot"
     assert bin_path("ble_bot", "ble_bot.bin") == "/apps/ble_bot/ble_bot.bin"
+
+
+def test_vfs_save_paths() -> None:
+    assert "/home/default/saves" in VFS_DIRS
+    assert "/home/default/settings.json" in VFS_DIRS
 
 
 def test_sweep_tmp_ttl(tmp_path: Path) -> None:

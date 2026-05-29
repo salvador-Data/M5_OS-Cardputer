@@ -24,6 +24,9 @@ BIN_NAME = re.compile(r"^[A-Za-z0-9._-]+\.bin$")
 SHA256_HEX = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
+MAX_APP_BIN_BYTES = 3145728
+
+
 class ManifestError(ValueError):
     pass
 
@@ -84,6 +87,16 @@ def validate_manifest(data: dict[str, Any]) -> list[dict[str, Any]]:
         sha256 = item.get("sha256")
         if sha256 is not None and str(sha256).strip():
             _check_sha256(str(sha256).strip(), f"firmware[{i}].sha256")
+        size = item.get("size")
+        if size is not None and size != "":
+            try:
+                size_int = int(size)
+            except (TypeError, ValueError) as exc:
+                raise ManifestError(f"firmware[{i}].size must be an integer") from exc
+            if size_int <= 0 or size_int > MAX_APP_BIN_BYTES:
+                raise ManifestError(
+                    f"firmware[{i}].size {size_int} out of range (1..{MAX_APP_BIN_BYTES})"
+                )
         validated.append(item)
     return validated
 

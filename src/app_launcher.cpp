@@ -35,6 +35,12 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     }
 
     const size_t firmwareSize = firmware.size();
+    if (firmwareSize == 0 || firmwareSize > kMaxAppBinBytes) {
+        firmware.close();
+        result.message = firmwareSize ? "App too large for OTA slot" : "Empty bin file";
+        log::info("launch_size_rejected", safeBin);
+        return result;
+    }
     if (const FirmwarePackage* meta = catalog_.findByBinFile(safeBin)) {
         if (meta->sha256.length()) {
             const String digest = security::computeFileSha256Hex(firmware);

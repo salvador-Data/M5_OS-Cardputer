@@ -19,6 +19,8 @@ VFS_DIRS = (
     "/home/default",
     "/home/default/apps",
     "/home/default/cache",
+    "/home/default/saves",
+    "/home/default/settings.json",
     "/tmp",
     "/var/log",
 )

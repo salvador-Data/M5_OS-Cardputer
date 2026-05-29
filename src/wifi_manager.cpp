@@ -1,5 +1,7 @@
 #include "wifi_manager.h"
 
+#include "m5os_settings.h"
+#include "m5os_vfs.h"
 #include "power_manager.h"
 #include "serial_log.h"
 #include "ui_display.h"
@@ -47,7 +49,14 @@ bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t
     if (WiFi.status() == WL_CONNECTED) {
         if (power::isSaving()) WiFi.setSleep(WIFI_PS_MIN_MODEM);
         log::info("wifi_connected", wifiIpAddress());
-        ui::showMessage("WiFi", wifiIpAddress(), TFT_GREEN);
+        String body = wifiIpAddress();
+        if (settings::saveWifi(ssidOut, passOut)) {
+            body += "\nSaved to\n" + String(vfs::kSettingsPath);
+            ui::showMessage("WiFi", body, TFT_GREEN, 2000);
+        } else {
+            body += "\nInsert SD to save\nWiFi (session only)";
+            ui::showMessage("WiFi", body, TFT_YELLOW, 2000);
+        }
         return true;
     }
     log::info("wifi_failed");

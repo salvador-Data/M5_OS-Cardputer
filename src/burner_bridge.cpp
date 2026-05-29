@@ -7,11 +7,12 @@ namespace m5os::burner {
 
 void logWorkflowToSerial() {
     log::info("burner_workflow",
-              "USB+M5Burner+Cardputer target+flash M5_OS bin; apps in SD /firmware/");
+              "M5Burner=base M5 OS flash once; apps stay on SD /apps/; "
+              "re-flash M5 OS only after running an app or OS update");
 }
 
 String recoveryInstructions() {
-    return "Flash M5 OS via M5Burner or PlatformIO to return to launcher.";
+    return "M5Burner/PlatformIO: flash M5 OS base only.\nApps remain on SD /apps/.";
 }
 
 void showHelpScreen() {

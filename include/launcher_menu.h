@@ -16,6 +16,7 @@ public:
     void showFileExplorer(const char* path);
     void showThemeMenu();
     void showWifiSetup();
+    void showSaveExportMenu();
     void showBurnerBridge();
     void showStorageCleanup();
     void showHelp();

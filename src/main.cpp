@@ -9,6 +9,8 @@
 #include "firmware_catalog.h"
 #include "launcher_menu.h"
 #include "m5os_config.h"
+#include "m5os_settings.h"
+#include "m5os_vfs.h"
 #include "m5os_gc.h"
 #include "serial_log.h"
 #include "ui_display.h"
@@ -30,12 +32,17 @@ void setup() {
     m5os::ui::bootIntroBegin();
 
     if (!sdOk) {
-        m5os::log::info("boot_sd_offline", "Menu available; apps need FAT32 SD");
-        m5os::ui::bootIntroStage(m5os::ui::BootStage::MountSd, "SD offline");
+        const String sdDetail = m5os::vfs::lastMountError().length() ? m5os::vfs::lastMountError() : "SD offline";
+        m5os::log::info("boot_sd_offline", sdDetail);
+        m5os::ui::bootIntroStage(m5os::ui::BootStage::MountSd, sdDetail);
         m5os::ui::bootIntroFinish();
-        m5os::ui::showMessage("SD offline", "Insert FAT32 SD\nMenu works without it", TFT_YELLOW, 1500);
+        m5os::ui::showMessage("SD offline", sdDetail + "\nMenu works without it", TFT_YELLOW, 1500);
     } else {
         m5os::ui::bootIntroStage(m5os::ui::BootStage::MountSd, "VFS ready");
+
+        if (m5os::settings::load()) {
+            m5os::ui::setThemePreset(m5os::settings::themePreset());
+        }
 
         gCatalog.scanInstalled();
         bool manifestOk = false;

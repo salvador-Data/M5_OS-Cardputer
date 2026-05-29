@@ -7,6 +7,7 @@
 namespace m5os::ui {
 
 static Theme gTheme;
+static int gThemePreset = 3;
 static unsigned long gBootStartMs = 0;
 
 namespace {
@@ -71,13 +72,14 @@ void drawPasswordFrame(const char* title, size_t length, size_t scrollOffset, bo
     if (fullFrame) {
         drawHeader(title);
     } else {
-        d.fillRect(0, 20, d.width(), 58, TFT_BLACK);
+        d.fillRect(0, 20, d.width(), 72, TFT_BLACK);
     }
 
-    const uint16_t fieldBg = themeFieldBg();
-    const uint16_t fieldFg = themeFieldText();
-    const uint16_t labelFg = themeLabelOnBlack();
-    const uint16_t hintFg = themeHintOnBlack();
+    // Fixed contrast — theme lerp can wash out field/text (all-white screen).
+    const uint16_t fieldBg = TFT_DARKGREY;
+    const uint16_t fieldFg = TFT_WHITE;
+    const uint16_t labelFg = TFT_WHITE;
+    const uint16_t hintFg = TFT_DARKGREY;
 
     d.setTextColor(labelFg, TFT_BLACK);
     d.setCursor(4, 24);
@@ -217,7 +219,12 @@ void drawBootFrame(int percent, const char* label, const String& detail, uint8_t
 
 Theme& theme() { return gTheme; }
 
+int getThemePreset() { return gThemePreset; }
+
 void setThemePreset(int preset) {
+    if (preset < 0) preset = 0;
+    if (preset > 3) preset = 3;
+    gThemePreset = preset;
     switch (preset) {
         case 1:
             gTheme.primary = 0x07E0;
@@ -418,6 +425,16 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
         }
 
         m5os::update();
+        Buttons nav = readButtonsExtended();
+        if (nav.ok) {
+            out[length] = '\0';
+            return true;
+        }
+        if (nav.back) {
+            out[0] = '\0';
+            return false;
+        }
+
         if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
             const auto status = M5Cardputer.Keyboard.keysState();
             if (status.enter) {
@@ -427,6 +444,7 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
             if (status.del && length > 0) {
                 length--;
                 out[length] = '\0';
+                needFullFrame = true;
                 continue;
             }
             for (auto key : status.word) {
@@ -443,11 +461,13 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
                         length--;
                         out[length] = '\0';
                     }
+                    needFullFrame = true;
                     continue;
                 }
                 if (length < outLen - 1 && key >= 32 && key <= 126) {
                     out[length++] = static_cast<char>(key);
                     out[length] = '\0';
+                    needFullFrame = true;
                 }
             }
         }

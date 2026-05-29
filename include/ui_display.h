@@ -16,6 +16,7 @@ enum class BootStage { MountSd, LoadManifest, GcScan, Ready };
 
 Theme& theme();
 void setThemePreset(int preset);
+int getThemePreset();
 
 void drawHeader(const char* title);
 void showMessage(const char* title, const String& body, uint16_t color = TFT_WHITE,

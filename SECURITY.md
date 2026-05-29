@@ -88,7 +88,9 @@ Whitelisted app directories under `/apps/` are **never** auto-deleted.
 
 - If `Update.write` or `Update.end` fails, the **M5 OS launcher partition is not replaced** — the device stays on the launcher.
 - After a successful flash, the device reboots into the selected app. **Return to M5 OS:** reflash the M5 OS `.bin` via PlatformIO or M5Burner (menu → **M5Burner / recovery**).
-- Keep a copy of the M5 OS launcher `.bin` on your PC and on SD `/firmware/` is not used for the launcher itself — use USB recovery.
+- App `.bin` files on SD under `/apps/` are **not** deleted when you launch or reflash base OS.
+- **Size limit:** app bins must be ≤ **3 MiB** (`kMaxAppBinBytes`) to fit the default 8 MB OTA slot.
+- M5Burner full-flash is for **base OS only** — never use it to install sideload apps; copy app bins to SD instead. See [docs/APP_INSTALL.md](docs/APP_INSTALL.md).
 
 ## Reporting
 

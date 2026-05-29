@@ -14,17 +14,19 @@ namespace {
 bool g_sdMounted = false;
 String g_lastMountError;
 
-// Cardputer display uses SPI3 (lgfx). SD must use FSPI (SPI2 on ESP32-S3), not HSPI.
-SPIClass& sdSpiBus() {
-    static SPIClass bus(FSPI);
-    static bool begun = false;
-    if (!begun) {
-        pinMode(kSdCsPin, OUTPUT);
-        digitalWrite(kSdCsPin, HIGH);
-        bus.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
-        begun = true;
-    }
-    return bus;
+// Match M5 official sdcard.ino: global SPI on Cardputer pins (CS12 SCK40 MISO39 MOSI14).
+// Do not use HSPI/SPI3 — display (lgfx) owns that bus; a second SPIClass(FSPI) fights default SPI.
+void initSdSpiBus() {
+    pinMode(kSdCsPin, OUTPUT);
+    digitalWrite(kSdCsPin, HIGH);
+    SPI.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
+}
+
+void resetSdSpiBus() {
+    SD.end();
+    SPI.end();
+    delay(30);
+    initSdSpiBus();
 }
 
 const char* cardTypeLabel(uint8_t cardType) {
@@ -41,8 +43,7 @@ const char* cardTypeLabel(uint8_t cardType) {
 }
 
 bool trySdMountOnce(uint32_t hz, String* failDetail) {
-    SPIClass& bus = sdSpiBus();
-    if (SD.begin(kSdCsPin, bus, hz)) {
+    if (SD.begin(kSdCsPin, SPI, hz)) {
         const uint8_t cardType = SD.cardType();
         if (cardType == CARD_NONE) {
             SD.end();
@@ -58,23 +59,42 @@ bool trySdMountOnce(uint32_t hz, String* failDetail) {
     return false;
 }
 
+String g_lastMountDetail;
+
 bool trySdMount() {
     const uint32_t speeds[] = {25000000, 10000000, 4000000};
-    constexpr uint8_t kRounds = 4;
+    constexpr uint8_t kRounds = 6;
     String lastDetail;
 
-    SD.end();
+    resetSdSpiBus();
     for (uint8_t round = 0; round < kRounds; ++round) {
-        if (round > 0) delay(150);
+        if (round > 0) {
+            delay(200);
+            resetSdSpiBus();
+        }
         for (uint32_t hz : speeds) {
-            if (trySdMountOnce(hz, &lastDetail)) return true;
-            log::info("sd_mount_retry", lastDetail);
+            if (trySdMountOnce(hz, &lastDetail)) {
+                g_lastMountDetail = "";
+                return true;
+            }
+            log::info("sd_mount_retry", "r" + String(round) + " " + lastDetail);
             SD.end();
-            delay(40);
+            delay(50);
         }
     }
+    g_lastMountDetail = lastDetail;
     log::info("sd_mount_failed", lastDetail.length() ? lastDetail : "all_attempts");
     return false;
+}
+
+String mountFailureMessage() {
+    if (g_lastMountDetail.indexOf("no_card_type") >= 0) {
+        return "No microSD in slot";
+    }
+    if (g_lastMountDetail.indexOf("begin_fail") >= 0) {
+        return "SD present, mount failed\nFAT32 + reseat card";
+    }
+    return "No FAT32 SD detected";
 }
 
 bool mkdirIfMissing(const char* path) {
@@ -184,19 +204,20 @@ MountResult mountAndInit() {
     g_sdMounted = false;
     g_lastMountError = "";
     SD.end();
-    // Let microSD power stabilize after M5Cardputer.begin().
-    delay(250);
+    SPI.end();
+    // Let microSD power stabilize after M5Cardputer.begin() (official example order).
+    delay(400);
     if (!trySdMount()) {
-        result.message = "No FAT32 SD detected";
+        result.message = mountFailureMessage();
         g_lastMountError = result.message;
-        log::info("sd_missing", result.message);
+        log::info("sd_missing", g_lastMountDetail.length() ? g_lastMountDetail : result.message);
         return result;
     }
 
     const char* tree[] = {kSystemDir,       kSystemBinDir,    kAppsDir,
                           kHomeDir,         kHomeDefaultDir,  kHomeAppsDir,
-                          kHomeCacheDir,    kTmpDir,          kVarLogDir,
-                          kLegacyFirmwareDir};
+                          kHomeCacheDir,    kSavesDir,        kTmpDir,
+                          kVarLogDir,       kLegacyFirmwareDir};
     for (const char* dir : tree) {
         if (!mkdirChain(dir)) {
             result.message = String("Cannot create ") + dir;

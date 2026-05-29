@@ -3,6 +3,7 @@
 #include "burner_bridge.h"
 #include "m5os_config.h"
 #include "m5os_gc.h"
+#include "m5os_settings.h"
 #include "m5os_vfs.h"
 #include "serial_log.h"
 #include "power_manager.h"
@@ -13,6 +14,19 @@
 #include <SD.h>
 
 namespace m5os {
+
+namespace {
+
+void showSdRequired(const String& action) {
+    String body = "Insert SD to save";
+    if (action.length()) body = action + "\n" + body;
+    const String sdDetail = vfs::lastMountError();
+    if (sdDetail.length()) body += "\n" + sdDetail;
+    body += "\n/contacts away from screen";
+    ui::showMessage("No SD", body, TFT_YELLOW);
+}
+
+}  // namespace
 
 LauncherMenu::LauncherMenu(FirmwareCatalog& catalog, AppLauncher& launcher)
     : catalog_(catalog), launcher_(launcher) {}
@@ -77,6 +91,10 @@ void LauncherMenu::showInstalledApps() {
 }
 
 void LauncherMenu::showDownloadCatalog() {
+    if (!settings::ensureSdMounted()) {
+        showSdRequired("Download needs SD");
+        return;
+    }
     std::vector<String> labels;
     for (const auto& pkg : catalog_.available()) {
         String line = pkg.name + " v" + pkg.version;
@@ -90,13 +108,22 @@ void LauncherMenu::showDownloadCatalog() {
         ui::showMessage("Download", pkg.name + "\nAlready on SD", TFT_YELLOW);
         return;
     }
+    if (!wifiIsConnected()) {
+        ui::showMessage("Download", "WiFi required", TFT_RED);
+        return;
+    }
     ui::drawHeader("Downloading");
     m5os::lcd().setCursor(4, 30);
     m5os::lcd().println(pkg.name);
     if (catalog_.downloadPackage(pkg)) {
-        ui::showMessage("Installed", pkg.name, TFT_GREEN);
+        const String path = catalog_.binPathForPackage(pkg);
+        String body = pkg.name;
+        if (path.length()) body += "\nSaved to\n" + path;
+        ui::showMessage("Installed", body, TFT_GREEN, 2200);
     } else {
-        ui::showMessage("Error", "Download failed", TFT_RED);
+        String body = "Download failed";
+        if (!vfs::isMounted()) body = "Insert SD to save";
+        ui::showMessage("Error", body, TFT_RED);
     }
 }
 
@@ -177,8 +204,43 @@ void LauncherMenu::showThemeMenu() {
     static const char* themes[] = {"Baby Blue", "Hacker Green", "Mr. Robot Red", "Hacker Planet"};
     std::vector<String> labels;
     for (auto* t : themes) labels.push_back(t);
-    const int pick = ui::selectFromList(labels, "Theme");
-    if (pick >= 0) ui::setThemePreset(pick);
+    const int pick = ui::selectFromList(labels, "Theme", ui::getThemePreset());
+    if (pick < 0) return;
+    ui::setThemePreset(pick);
+    if (settings::saveTheme(pick)) {
+        ui::showMessage("Theme saved", String(themes[pick]) + "\n" + vfs::kSettingsPath, TFT_GREEN, 1400);
+    } else {
+        showSdRequired("Theme active until reboot");
+    }
+}
+
+void LauncherMenu::showSaveExportMenu() {
+    static const char* items[] = {
+        "Export /var/log snapshot",
+        "Backup settings.json",
+    };
+    std::vector<String> labels;
+    for (auto* item : items) labels.push_back(item);
+    const int pick = ui::selectFromList(labels, "Save / export");
+    if (pick < 0) return;
+    if (!settings::ensureSdMounted()) {
+        showSdRequired();
+        return;
+    }
+    String outPath;
+    bool ok = false;
+    if (pick == 0) {
+        ok = settings::exportLogSnapshot(&outPath);
+    } else {
+        ok = settings::exportSettingsSnapshot(&outPath);
+    }
+    if (ok && outPath.length()) {
+        ui::showMessage("Saved", outPath, TFT_GREEN, 2000);
+    } else if (ok) {
+        ui::showMessage("Saved", vfs::kSavesDir, TFT_GREEN);
+    } else {
+        ui::showMessage("Save failed", "Check SD free space", TFT_RED);
+    }
 }
 
 void LauncherMenu::showWifiSetup() {
@@ -230,6 +292,7 @@ void LauncherMenu::runMainLoop() {
         "Storage cleanup",
         "Export catalog (serial)",
         "File explorer",
+        "Save / export to SD",
         "Theme",
         "WiFi setup",
         "M5Burner / recovery",
@@ -262,15 +325,18 @@ void LauncherMenu::runMainLoop() {
                 showFileExplorer("/");
                 break;
             case 6:
-                showThemeMenu();
+                showSaveExportMenu();
                 break;
             case 7:
-                showWifiSetup();
+                showThemeMenu();
                 break;
             case 8:
-                showBurnerBridge();
+                showWifiSetup();
                 break;
             case 9:
+                showBurnerBridge();
+                break;
+            case 10:
                 showHelp();
                 break;
             default:

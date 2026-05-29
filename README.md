@@ -59,6 +59,7 @@ Full guide: [CARDPUTER.md](https://github.com/salvador-Data/cyberThreatGotchi/bl
 | **Launch installed apps** | Flash & run whitelisted `.bin` from `/apps/<name>/` (legacy `/firmware/` still supported) |
 | **Catalog download** | Pull entries from JSON manifest over Wi-Fi or SD `/apps/manifest.json` |
 | **SD VFS layout** | `/system`, `/apps`, `/home/default`, `/tmp`, `/var/log` on FAT32 microSD |
+| **Save on SD** | Theme + Wi-Fi in `/home/default/settings.json`; exports in `/home/default/saves/` — see [docs/APP_INSTALL.md](docs/APP_INSTALL.md#saving-on-sd) |
 | **Storage cleanup** | Boot GC quick scan + menu **Storage cleanup** (tmp TTL, log rotation, cache reclaim) |
 | **Boot splash** | Hacker Planet teal/magenta intro with progress bar + chiptune beep |
 | **Serial logging** | JSON events on USB `@ 115200` (boot, catalog, launch, burner help) |
@@ -194,7 +195,7 @@ The IRremote `-Wvolatile` pragma warning is harmless and can be ignored.
 
 | Fix | Detail |
 |-----|--------|
-| SD SPI | Official Cardputer pins (SCK **40**, MOSI **14**, MISO **39**, CS **12**) on dedicated **HSPI** so display SPI3 is not reset |
+| SD SPI | Official Cardputer pins (SCK **40**, MOSI **14**, MISO **39**, CS **12**) via global **SPI** (same as M5 `sdcard.ino`); display stays on SPI3 |
 | Enter key | Maps `Keyboard.keysState().enter` (HID Enter), not only `\n` in the word buffer |
 | Display | Boot splash draws once per stage; menus redraw only when selection changes |
 
@@ -245,6 +246,8 @@ On first boot with a FAT32 card inserted, M5 OS creates:
   ble_bot/
     ble_bot.bin
 /home/default/
+  settings.json       Theme + Wi-Fi (saved from menu)
+  saves/              Log/settings export snapshots
   apps/<name>/        Per-app data compartments
   cache/              Reclaimable cache (GC menu)
 /tmp/                 Temp files (24h TTL sweep on boot)
