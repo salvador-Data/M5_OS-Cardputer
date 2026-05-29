@@ -1,5 +1,6 @@
 #include "ui_display.h"
 
+#include "boot_jokes.h"
 #include "m5os_vfs.h"
 #include "power_manager.h"
 
@@ -7,6 +8,7 @@
 #include <SD.h>
 
 #include <cmath>
+#include <cstring>
 
 namespace m5os::ui {
 
@@ -410,9 +412,39 @@ uint8_t introTextAlpha(int frame, int startFrame, int fadeFrames) {
 }
 
 template <typename Display>
+void drawAngledEyeSlit(Display& d, int x0, int y0, int x1, int y1, uint16_t ink) {
+    const int dx = abs(x1 - x0);
+    const int dy = abs(y1 - y0);
+    const int steps = max(dx, dy);
+    if (steps == 0) {
+        d.drawPixel(x0, y0, ink);
+        return;
+    }
+    for (int i = 0; i <= steps; ++i) {
+        const int x = x0 + (x1 - x0) * i / steps;
+        const int y = y0 + (y1 - y0) * i / steps;
+        d.drawPixel(x, y, ink);
+        d.drawPixel(x, y + 1, ink);
+    }
+}
+
+template <typename Display>
+void drawArchedBrow(Display& d, int cx, int cy, int halfW, bool leftSide, uint16_t ink) {
+    const int dir = leftSide ? -1 : 1;
+    const int startX = cx + dir * halfW;
+    const int endX = cx + dir * max(2, halfW / 3);
+    const int midX = (startX + endX) / 2;
+    d.drawPixel(startX, cy, ink);
+    d.drawPixel(midX, cy - 1, ink);
+    d.drawPixel(endX, cy, ink);
+    if (halfW >= 5) d.drawPixel(midX + dir, cy - 1, ink);
+}
+
+template <typename Display>
 void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
     const uint16_t ringColor = lerp565(gTheme.primary, gTheme.secondary, pulse);
-    const uint16_t faceColor = TFT_WHITE;
+    constexpr uint16_t kFaceCream = 0xFFDF;
+    const uint16_t faceColor = kFaceCream;
     const uint16_t ink = TFT_BLACK;
 
     const int ringPulse = pulse >> 5;
@@ -422,51 +454,95 @@ void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
         d.drawCircle(cx, cy - 1, radius, fade);
     }
 
-    const int faceW = faceR + 1;
-    const int faceH = faceR + 5;
-    const int faceTop = cy - faceH / 2;
+    const int faceW = max(8, faceR);
+    const int faceH = max(12, faceR + faceR / 2 + 2);
+    const int chinY = cy + faceH / 2 + max(3, faceR / 3);
+    const int chinJoinY = cy + faceH / 4;
 
-    d.fillEllipse(cx, cy - 2, faceW, faceH, ink);
-    d.fillEllipse(cx, cy - 2, max(1, faceW - 1), max(1, faceH - 1), faceColor);
-
-    const int chinTop = cy + faceH / 4;
-    const int chinTip = cy + faceH / 2 + faceR / 3;
-    d.fillTriangle(cx - faceW + 2, chinTop, cx + faceW - 2, chinTop, cx, chinTip, ink);
-    d.fillTriangle(cx - faceW + 4, chinTop + 1, cx + faceW - 4, chinTop + 1, cx, chinTip - 1,
+    d.fillEllipse(cx, cy - 1, faceW + 1, faceH + 1, ink);
+    d.fillEllipse(cx, cy - 1, faceW, faceH, faceColor);
+    d.fillTriangle(cx - faceW, chinJoinY, cx + faceW, chinJoinY, cx, chinY + 1, ink);
+    d.fillTriangle(cx - faceW + 1, chinJoinY + 1, cx + faceW - 1, chinJoinY + 1, cx, chinY,
                    faceColor);
 
-    const int browY = faceTop + faceH / 5;
-    const int browW = max(3, faceR / 3);
-    d.drawFastHLine(cx - faceW / 2, browY, browW, ink);
-    d.drawFastHLine(cx + faceW / 2 - browW, browY, browW, ink);
-    d.drawPixel(cx - faceW / 2 + 1, browY - 1, ink);
-    d.drawPixel(cx + faceW / 2 - 2, browY - 1, ink);
+    const int cheekY0 = cy - faceR / 5;
+    const int cheekY1 = cy + faceR / 3;
+    d.drawLine(cx - faceW + 1, cheekY0, cx - faceW / 2 + 1, cheekY1, ink);
+    d.drawLine(cx + faceW - 1, cheekY0, cx + faceW / 2 - 1, cheekY1, ink);
 
-    const int eyeY = cy - faceR / 10;
-    const int slitW = max(4, faceR / 3);
-    const int slitH = max(2, faceR / 9);
-    d.fillRect(cx - faceW + 3, eyeY, slitW, slitH, ink);
-    d.fillRect(cx + faceW - slitW - 3, eyeY, slitW, slitH, ink);
-    d.drawPixel(cx - faceW + slitW + 2, eyeY - 1, ink);
-    d.drawPixel(cx + faceW - slitW - 3, eyeY - 1, ink);
+    const int eyeMidY = cy - faceR / 8;
+    const int eyeSpan = max(4, faceR / 2);
+    const int eyeLift = max(1, faceR / 8);
+    const int leftOuterX = cx - faceW + 2;
+    const int leftInnerX = cx - eyeSpan / 2;
+    const int rightInnerX = cx + eyeSpan / 2;
+    const int rightOuterX = cx + faceW - 2;
+    drawAngledEyeSlit(d, leftInnerX, eyeMidY + 1, leftOuterX, eyeMidY - eyeLift, ink);
+    drawAngledEyeSlit(d, rightInnerX, eyeMidY + 1, rightOuterX, eyeMidY - eyeLift, ink);
 
-    d.drawLine(cx - faceW + 4, cy + faceR / 12, cx - faceR / 4, cy + faceR / 2, ink);
-    d.drawLine(cx + faceW - 4, cy + faceR / 12, cx + faceR / 4, cy + faceR / 2, ink);
+    const int browY = eyeMidY - max(3, faceR / 5);
+    drawArchedBrow(d, cx, browY, eyeSpan, true, ink);
+    drawArchedBrow(d, cx, browY, eyeSpan, false, ink);
 
-    const int stashY = cy + faceR / 5;
-    const int stashW = max(3, faceR / 3);
-    d.fillRect(cx - stashW - 2, stashY, stashW, 2, ink);
-    d.fillRect(cx + 2, stashY, stashW, 2, ink);
-    d.drawFastVLine(cx, stashY - 1, 5, ink);
+    const int noseTop = eyeMidY + 2;
+    const int noseLen = max(3, faceR / 4);
+    d.drawFastVLine(cx, noseTop, noseLen, ink);
+    if (faceR >= 14) {
+        d.drawPixel(cx - 1, noseTop + noseLen - 1, ink);
+        d.drawPixel(cx + 1, noseTop + noseLen - 1, ink);
+    }
 
-    const int beardTop = stashY + 3;
-    d.fillTriangle(cx - faceW / 2 + 2, beardTop, cx + faceW / 2 - 2, beardTop, cx, chinTip - 1,
-                   ink);
-    d.fillTriangle(cx - faceW / 2 + 4, beardTop + 1, cx + faceW / 2 - 4, beardTop + 1, cx,
-                   chinTip - 3, faceColor);
-    d.drawFastVLine(cx, beardTop, chinTip - beardTop - 2, ink);
+    const int stashY = cy + max(2, faceR / 6);
+    const int stashEndX = cx - max(2, faceR / 8);
+    const int stashStartX = cx - faceW + 2;
+    d.drawFastHLine(stashStartX, stashY, stashEndX - stashStartX, ink);
+    d.drawFastHLine(cx + max(2, faceR / 8), stashY, faceW - max(2, faceR / 8) - 2, ink);
+    d.drawPixel(stashStartX, stashY - 1, ink);
+    d.drawPixel(stashStartX + 1, stashY - 2, ink);
+    d.drawPixel(cx + faceW - 3, stashY - 1, ink);
+    d.drawPixel(cx + faceW - 4, stashY - 2, ink);
 
-    d.drawEllipse(cx, cy - 2, faceW, faceH, ink);
+    const int smileTop = stashY + 2;
+    const int smileDepth = max(2, faceR / 6);
+    d.drawLine(cx - max(2, faceR / 10), smileTop, cx, smileTop + smileDepth, ink);
+    d.drawLine(cx + max(2, faceR / 10), smileTop, cx, smileTop + smileDepth, ink);
+
+    const int goateeTop = smileTop + smileDepth + 1;
+    const int goateeW = max(2, faceR / 6);
+    d.fillTriangle(cx - goateeW, goateeTop, cx + goateeW, goateeTop, cx, chinY - 1, ink);
+    d.drawFastVLine(cx, goateeTop, chinY - goateeTop - 2, ink);
+
+    if (faceR >= 16) {
+        d.drawPixel(cx - 1, chinY - 2, ink);
+        d.drawPixel(cx + 1, chinY - 3, ink);
+    }
+
+    d.drawEllipse(cx, cy - 1, faceW, faceH, ink);
+    d.drawLine(cx - faceW + 1, chinJoinY, cx, chinY, ink);
+    d.drawLine(cx + faceW - 1, chinJoinY, cx, chinY, ink);
+}
+
+struct IntroJokeLines {
+    char line1[41]{};
+    char line2[41]{};
+};
+
+static IntroJokeLines gIntroJoke;
+
+void prepareIntroJoke() {
+    const char* joke = m5os::boot::randomJokeForBoot();
+    m5os::boot::wrapBootJoke(joke, gIntroJoke.line1, gIntroJoke.line2, 38);
+}
+
+template <typename Display>
+void drawCenteredTextLine(Display& d, int y, const char* text, uint16_t fg, uint16_t bg) {
+    if (!text || text[0] == '\0') return;
+    d.setTextSize(1);
+    d.setTextColor(fg, bg);
+    const int textW = static_cast<int>(strlen(text)) * 6;
+    const int x = max(2, (static_cast<int>(d.width()) - textW) / 2);
+    d.setCursor(x, y);
+    d.print(text);
 }
 
 template <typename Display>
@@ -476,13 +552,13 @@ void drawIntroFrame(Display& d, int frame, int totalFrames) {
     const int cx = d.width() / 2;
     const uint8_t pulse = introPulse(frame);
     const int faceR = introMaskRadius(frame);
-    drawGuyFawkesMask(d, cx, 48, faceR, pulse);
+    drawGuyFawkesMask(d, cx, 44, faceR, pulse);
 
     const uint8_t titleAlpha = introTextAlpha(frame, 10, 14);
     if (titleAlpha > 0) {
         d.setTextSize(2);
         d.setTextColor(lerp565(TFT_BLACK, gTheme.primary, titleAlpha), TFT_BLACK);
-        d.setCursor(max(4, cx - 72), 88);
+        d.setCursor(max(4, cx - 72), 82);
         d.print("Hacker Planet");
     }
 
@@ -490,20 +566,28 @@ void drawIntroFrame(Display& d, int frame, int totalFrames) {
     if (creditAlpha > 0) {
         d.setTextSize(1);
         d.setTextColor(lerp565(TFT_BLACK, gTheme.secondary, creditAlpha), TFT_BLACK);
-        d.setCursor(max(4, cx - 56), 112);
+        d.setCursor(max(4, cx - 56), 102);
         d.print("by salvadorData");
+    }
+
+    const uint8_t jokeAlpha = introTextAlpha(frame, 30, 12);
+    if (jokeAlpha > 0) {
+        const uint16_t jokeColor = lerp565(TFT_BLACK, TFT_CYAN, jokeAlpha);
+        drawCenteredTextLine(d, 112, gIntroJoke.line1, jokeColor, TFT_BLACK);
+        drawCenteredTextLine(d, 120, gIntroJoke.line2, jokeColor, TFT_BLACK);
     }
 
     const int barW = d.width() - 20;
     const int progress = min(100, (frame + 1) * 100 / totalFrames);
-    d.drawRect(10, 126, barW, 6, gTheme.secondary);
-    d.fillRect(11, 127, max(1, (barW - 2) * progress / 100), 4,
+    d.drawRect(10, 128, barW, 5, gTheme.secondary);
+    d.fillRect(11, 129, max(1, (barW - 2) * progress / 100), 3,
                lerp565(gTheme.primary, gTheme.secondary, pulse));
 }
 
 void playHackerPlanetIntro() {
     auto& lcd = m5os::lcd();
     constexpr int kFrames = 60;
+    prepareIntroJoke();
     lgfx::LGFX_Sprite canvas(&lcd);
     const bool buffered = canvas.createSprite(lcd.width(), lcd.height()) != nullptr;
 
