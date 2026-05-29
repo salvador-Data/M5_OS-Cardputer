@@ -56,7 +56,7 @@ constexpr char kLastSizeKey[] = "last_size";
 
 constexpr char kLastMtimeKey[] = "last_mtime";
 
-constexpr size_t kIoChunkBytes = 64;
+constexpr size_t kIoChunkBytes = 4096;
 
 
 

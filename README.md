@@ -65,6 +65,8 @@ When you confirm loading an app from **Load app** or the file explorer:
 
 Use fast load only for apps you trust (your own builds or verified downloads). Serial log event: `launch_fast_load`.
 
+**Hash speed:** On ESP32-S3, mbedtls uses the on-chip SHA accelerator (`CONFIG_MBEDTLS_HARDWARE_SHA`). File reads hash in **4 KiB** chunks (not 64 bytes), and unchanged files skip re-hash when size + mtime match the last successful load cache.
+
 ---
 
 ## Hardware

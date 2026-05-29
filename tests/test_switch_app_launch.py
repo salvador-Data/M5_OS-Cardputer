@@ -89,17 +89,23 @@ def test_launch_shows_starting_before_hash():
     assert "launch_hash_skip" in helper
 
 
-def test_launch_uses_64_byte_io_chunks():
+def test_launch_uses_4k_io_chunks():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
-    assert "kIoChunkBytes = 64" in text
+    assert "kIoChunkBytes = 4096" in text
     copy = text[text.index("bool copySdToOta") : text.index("LaunchResult launchFromOpenFile")]
     assert "feedWatchdog()" in copy
     assert "written % kIoChunkBytes" in copy
+    sec_h = (ROOT / "include" / "m5os_security.h").read_text(encoding="utf-8")
+    assert "kSha256IoChunkBytes = 4096" in sec_h
     sec = (ROOT / "src" / "m5os_security.cpp").read_text(encoding="utf-8")
     hash_fn = sec[sec.index("String computeFileSha256HexWithProgress") : sec.index("bool sha256Equal")]
-    assert "buffer[64]" in hash_fn
+    assert "buffer[kSha256IoChunkBytes]" in hash_fn
     assert "feedWatchdog()" in hash_fn
-    assert "hashed % 64" in hash_fn
+    assert "kSha256ProgressBytes" in hash_fn
+    sdk = (ROOT / "sdkconfig.defaults").read_text(encoding="utf-8")
+    assert "CONFIG_MBEDTLS_HARDWARE_SHA=y" in sdk
+    catalog = (ROOT / "src" / "firmware_catalog.cpp").read_text(encoding="utf-8")
+    assert "kSha256IoChunkBytes" in catalog
 
 
 def test_launch_bin_path_for_explorer():

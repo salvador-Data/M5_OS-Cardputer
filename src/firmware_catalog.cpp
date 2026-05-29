@@ -77,7 +77,7 @@ String hashDownloadStreamWithLimit(WiFiClient* stream, File& out, size_t maxByte
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
     mbedtls_sha256_starts(&ctx, 0);
-    uint8_t buffer[512];
+    uint8_t buffer[security::kSha256IoChunkBytes];
     size_t total = 0;
     uint32_t idleMs = 0;
     while (total < maxBytes) {

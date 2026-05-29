@@ -1,2 +1,5 @@
 # Panic / watchdog: print and auto-reboot (M5 OS crash recovery path).
 CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
+
+# ESP32-S3 SHA accelerator — mbedtls_sha256_* uses hardware when available.
+CONFIG_MBEDTLS_HARDWARE_SHA=y

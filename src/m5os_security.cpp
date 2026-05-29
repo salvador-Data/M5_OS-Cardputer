@@ -114,7 +114,7 @@ String computeFileSha256HexWithProgress(File& file, size_t totalBytes,
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
     mbedtls_sha256_starts(&ctx, 0);
-    uint8_t buffer[64];
+    uint8_t buffer[kSha256IoChunkBytes];
     size_t hashed = 0;
     while (file.available()) {
         const size_t n = file.read(buffer, sizeof(buffer));
@@ -122,7 +122,8 @@ String computeFileSha256HexWithProgress(File& file, size_t totalBytes,
         mbedtls_sha256_update(&ctx, buffer, n);
         hashed += n;
         feedWatchdog();
-        if (progress && (hashed == n || hashed % 64 == 0 || !file.available())) {
+        if (progress &&
+            (hashed == n || hashed % kSha256ProgressBytes == 0 || !file.available())) {
             progress(hashed, totalBytes);
         }
     }
