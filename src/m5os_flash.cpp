@@ -1,6 +1,6 @@
 #include "m5os_flash.h"
 
-
+#include "m5os_boot_policy.h"
 
 #include "M5OSDevice.h"
 
@@ -134,7 +134,7 @@ int otaIndexFromSelectEntry(const esp_ota_select_entry_t& entry, uint8_t otaAppC
 
 
 
-bool markStagedPartitionPendingVerify(const esp_partition_t* staged) {
+bool markStagedPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t targetState) {
 
     if (!staged) return false;
 
@@ -142,9 +142,7 @@ bool markStagedPartitionPendingVerify(const esp_partition_t* staged) {
 
     esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
 
-    if (esp_ota_get_state_partition(staged, &state) == ESP_OK &&
-
-        state == ESP_OTA_IMG_PENDING_VERIFY) {
+    if (esp_ota_get_state_partition(staged, &state) == ESP_OK && state == targetState) {
 
         return true;
 
@@ -188,7 +186,7 @@ bool markStagedPartitionPendingVerify(const esp_partition_t* staged) {
 
         if (otaIndexFromSelectEntry(entries[i], otaAppCount) != stagedIndex) continue;
 
-        entries[i].ota_state = ESP_OTA_IMG_PENDING_VERIFY;
+        entries[i].ota_state = targetState;
 
         entries[i].crc = bootloader_common_ota_select_crc(&entries[i]);
 
@@ -208,7 +206,13 @@ bool markStagedPartitionPendingVerify(const esp_partition_t* staged) {
 
 
 
-    if (updated) log::info("m5os_stage_pending", staged->label);
+    if (updated) {
+
+        log::info("m5os_stage_ota_state",
+
+                  String(staged->label) + ":" + String(static_cast<int>(targetState)));
+
+    }
 
     return updated;
 
@@ -298,7 +302,11 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     beginLaunchSession();
 
-    markStagedPartitionPendingVerify(target);
+    // VALID (not PENDING_VERIFY): foreign apps often esp_restart() during init; rollback would
+
+    // immediately revert to M5 OS before the user can use the loaded firmware.
+
+    markStagedPartitionOtaState(target, ESP_OTA_IMG_VALID);
 
 
 
@@ -544,7 +552,7 @@ const esp_partition_t* resolveLaunchBootPartition() {
 
 void applyColdBootHomeRestore() {
 
-    if (esp_reset_reason() == ESP_RST_POWERON) {
+    if (boot_policy::shouldColdBootRestoreHome(esp_reset_reason())) {
 
         restoreBootToHome();
 
@@ -564,29 +572,13 @@ void applyColdBootHomeRestore() {
 
 void applyCrashResetHomeRestore() {
 
-    switch (esp_reset_reason()) {
+    if (!boot_policy::shouldCrashResetRestoreHome(esp_reset_reason())) return;
 
-        case ESP_RST_PANIC:
+    restoreBootToHome();
 
-        case ESP_RST_INT_WDT:
+    clearLaunchPending();
 
-        case ESP_RST_TASK_WDT:
-
-        case ESP_RST_WDT:
-
-            restoreBootToHome();
-
-            clearLaunchPending();
-
-            log::info("m5os_crash_home", String(static_cast<int>(esp_reset_reason())));
-
-            break;
-
-        default:
-
-            break;
-
-    }
+    log::info("m5os_crash_home", String(static_cast<int>(esp_reset_reason())));
 
 }
 

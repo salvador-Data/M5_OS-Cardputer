@@ -57,7 +57,9 @@ def test_recovery_boot_wired_in_main():
     assert "saveHomeAppPartition()" in text
     assert "beginWatchdog()" in text
     flash = FLASH_CPP.read_text(encoding="utf-8")
-    assert "ESP_RST_POWERON" in flash
+    assert "shouldColdBootRestoreHome" in flash
+    policy = (ROOT / "include" / "m5os_boot_policy.h").read_text(encoding="utf-8")
+    assert "ESP_RST_POWERON" in policy
 
 
 def test_recovery_helpers_declared():

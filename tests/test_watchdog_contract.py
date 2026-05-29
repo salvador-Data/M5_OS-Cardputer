@@ -54,9 +54,11 @@ def test_launch_pending_skips_shutdown_restore_on_load_app():
 def test_crash_reset_restores_home():
     flash = FLASH_CPP.read_text(encoding="utf-8")
     fn = flash[flash.index("void applyCrashResetHomeRestore") : flash.index("void setLaunchPending")]
-    for reason in ("ESP_RST_PANIC", "ESP_RST_TASK_WDT", "ESP_RST_INT_WDT", "ESP_RST_WDT"):
-        assert reason in fn
+    assert "shouldCrashResetRestoreHome" in fn
     assert "restoreBootToHome()" in fn
+    policy = (ROOT / "include" / "m5os_boot_policy.h").read_text(encoding="utf-8")
+    for reason in ("ESP_RST_PANIC", "ESP_RST_TASK_WDT", "ESP_RST_INT_WDT", "ESP_RST_WDT"):
+        assert reason in policy
 
 
 def test_panic_reboot_enabled_in_sdkconfig():

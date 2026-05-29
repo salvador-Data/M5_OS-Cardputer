@@ -1,7 +1,8 @@
 # Panic / watchdog: print and auto-reboot (M5 OS crash recovery path).
 CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT=y
 
-# OTA rollback: SW reset from loaded app returns to M5 OS without re-flash.
+# OTA rollback remains available; session launch marks staged app VALID so init esp_restart()
+# does not immediately roll back to M5 OS before the user can use the loaded firmware.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # ESP32-S3 SHA accelerator — mbedtls_sha256_* uses hardware when available.

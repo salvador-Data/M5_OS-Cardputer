@@ -1,5 +1,6 @@
 #include "m5os_session.h"
 
+#include "m5os_boot_policy.h"
 #include "m5os_flash.h"
 #include "m5os_vfs.h"
 #include "serial_log.h"
@@ -97,9 +98,8 @@ bool prepareLaunchSd(const String& sdBinPath, const String& cacheKey, const Firm
 }
 
 bool isSessionReturnBoot() {
-    if (!isAppSessionActive() && !isSessionExitPending()) return false;
-    if (esp_reset_reason() == ESP_RST_POWERON) return false;
-    return isRunningHomePartition();
+    return boot_policy::shouldPromptSessionReturn(isAppSessionActive(), isSessionExitPending(),
+                                                  isRunningHomePartition(), esp_reset_reason());
 }
 
 bool promptSaveSessionAndRestoreHome() {

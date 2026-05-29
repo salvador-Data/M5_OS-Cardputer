@@ -28,13 +28,14 @@ def test_app_session_nvs_keys():
     ):
         assert sym in FLASH_H.read_text(encoding="utf-8")
         assert sym in flash
-    assert "markStagedPartitionPendingVerify" in flash
+    assert "markStagedPartitionOtaState" in flash
 
 
-def test_session_marks_staged_pending_before_reboot():
+def test_session_marks_staged_valid_before_reboot():
     flash = FLASH_CPP.read_text(encoding="utf-8")
     fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("bool nvsSetFlag")]
-    assert "markStagedPartitionPendingVerify(target)" in fn
+    assert "markStagedPartitionOtaState(target, ESP_OTA_IMG_VALID)" in fn
+    assert "ESP_OTA_IMG_PENDING_VERIFY" not in fn
     assert "clearLaunchPending()" in fn
     assert "setAppSessionActive(true)" in flash[flash.index("void beginLaunchSession") : flash.index("void cancelLaunchSession")]
 
@@ -70,7 +71,8 @@ def test_session_json_and_save_dirs():
     assert "Save files before exit?" in session
 
 
-def test_ota_rollback_enabled():
+def test_ota_rollback_enabled_for_manual_sw_exit():
+    """Rollback stays enabled for future OTA; session launch marks VALID to avoid auto-revert."""
     assert "CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y" in SDKCONFIG.read_text(encoding="utf-8")
 
 
