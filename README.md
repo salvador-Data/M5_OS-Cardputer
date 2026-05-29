@@ -40,7 +40,7 @@ Product page: [Hacker Planet Cardputer](https://salvador-Data.github.io/cyberThr
 
 | Feature | Menu item | What it does |
 |---------|-----------|--------------|
-| **Load app** | Load app (ESC/`) | Pick a whitelisted `.bin` from `/apps/<name>/` and flash it into the OTA slot. Confirm: **Enter** = SHA256 verify (default); **Tab** = fast load (skip hash, still checks ESP magic) |
+| **Load app** | Load app (ESC/`) | Pick a whitelisted `.bin` from `/apps/<name>/` and flash it into the **app2 run slot** (~3.75 MiB max). Confirm: **Enter** = SHA256 verify (default); **Tab** = fast load (skip hash, still checks ESP magic) |
 | **Load from catalog** | Load from catalog | Download manifest entries over Wi-Fi or from SD `/apps/manifest.json` |
 | **Load from M5Burner** | Load from M5Burner catalog | Browse LauncherHub Cardputer apps, stream firmware OTA, save a copy to SD |
 | **SD hard drive** | (automatic on boot) | FAT32 layout: `/system`, `/apps`, `/home/default`, `/tmp`, `/var/log` |
@@ -320,7 +320,9 @@ Shipped catalog entries link Hacker Planet apps:
 
 Partition layout (`partitions/m5os_cardputer_8MB.csv`): **app0** = M5 OS (~3.75 MiB), **app1** = **session gateway** (~448 KiB), **app2** = foreign app run slot (~3.75 MiB).
 
-**Load app** copies the `.bin` to **app2**, flashes the gateway into **app1** (from SD `/system/m5os_session_gateway.bin` or USB `scripts/flash_session_gateway.ps1`), then reboots into the gateway screen:
+**Load app** copies the `.bin` to **app2**, flashes the gateway into **app1** (from SD `/system/m5os_session_gateway.bin` or USB `scripts/flash_session_gateway.ps1`), then reboots into the gateway screen.
+
+**Troubleshooting — “App too large for OTA slot”:** Apps must fit the **app2** run slot (0x3C0000 bytes), not the small **app1** gateway partition. If you see this error on builds before May 2026, reflash M5 OS from this repo — older firmware mistakenly used the gateway partition size as the limit.
 
 | Gateway screen | Result |
 |----------------|--------|

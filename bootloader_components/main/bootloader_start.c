@@ -69,12 +69,8 @@ static bool m5os_should_boot_home(const bootloader_state_t* bs, int* home_index_
     if (m5os_sw_reset_is_intentional_launch()) {
         return false;
     }
-    if (!m5os_recovery_gpio_held() && esp_rom_get_reset_reason(0) == RESET_REASON_CORE_DEEP_SLEEP) {
-        return false;
-    }
-    if (!m5os_recovery_gpio_held()) {
-        /* Default: always reach M5 OS except intentional Load app SW handoff. */
-    }
+    /* Always reach M5 OS on power-on, side reset, deep-sleep wake, etc.
+     * Only SW reset with RTC handoff magic stays on gateway/app (Load app path). */
     const int home = m5os_home_partition_index(bs);
     if (home == INVALID_INDEX) {
         return false;

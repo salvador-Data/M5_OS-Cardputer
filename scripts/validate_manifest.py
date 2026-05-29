@@ -28,7 +28,7 @@ FID_HEX = re.compile(r"^[0-9a-fA-F]{32}$")
 BURNER_FILE = re.compile(r"^[A-Za-z0-9._-]+\.bin$")
 
 
-MAX_APP_BIN_BYTES = 0x3F0000
+MAX_APP_BIN_BYTES = 0x3C0000
 
 
 class ManifestError(ValueError):

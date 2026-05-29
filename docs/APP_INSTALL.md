@@ -116,7 +116,7 @@ Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub o
 | **M5 OS panic / watchdog reset** | `CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT` — auto-reboot; on boot `applyCrashResetHomeRestore()` points otadata at saved M5 OS home |
 | **Cold power-on / side reset** | Custom bootloader always boots M5 OS (app0); `applyColdBootHomeRestore()` fixes otadata. Side reset may show save prompt |
 | **ESC/` or BtnA at boot** | Bootloader or `tryEarlyRecoveryBoot()` forces M5 OS home |
-| **Load app reboot (SW reset)** | otadata stays on staged app1 (VALID — no auto-revert) |
+| **Load app reboot (SW reset)** | otadata → session gateway (app1), then app2 after Enter (VALID — no auto-revert) |
 
 Third-party apps that crash-loop without hardware reset may still require **side reset**, **power-cycle**, or **BtnA at boot** — M5 OS cannot run code inside a foreign app binary.
 
@@ -126,7 +126,7 @@ Third-party apps that crash-loop without hardware reset may still require **side
 |---------|--------|
 | HTTPS whitelist | Downloads from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, `hackerplanet.dev`, `api.launcherhub.net`, `m5burner-cdn.m5stack.com` |
 | SHA256 | Optional per manifest entry; verified on download and before load to run slot |
-| Size limit | App bins capped at **~3.94 MiB** (`kMaxAppBinBytes` = 0x3F0000) — matches `partitions/m5os_cardputer_8MB.csv` OTA slot |
+| Size limit | App bins capped at **~3.75 MiB** (`kMaxAppBinBytes` = 0x3C0000) — **app2 run slot** in `partitions/m5os_cardputer_8MB.csv` (not the ~448 KiB gateway on app1) |
 | Path safety | No `..` or slashes in bin names; slugs sanitized |
 | Load app confirm | User must confirm before any OTA write; failed load leaves launcher intact |
 | No partition-0 flash | M5 OS never writes bootloader/partition table from the menu — USB/M5Burner only |

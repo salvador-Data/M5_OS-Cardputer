@@ -19,7 +19,7 @@ namespace m5os {
 
 
 
-/** Inactive OTA partition size at runtime (may exceed kMaxAppBinBytes on app1). */
+/** Foreign-app run slot size (app2, or app1 on legacy 2-slot tables). Not the gateway slot. */
 
 size_t maxOtaAppBytes();
 

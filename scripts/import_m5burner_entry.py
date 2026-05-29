@@ -50,7 +50,7 @@ from pathlib import Path
 
 # Must match include/m5os_config.h kMaxAppBinBytes
 
-MAX_APP_BIN_BYTES = 0x3F0000
+MAX_APP_BIN_BYTES = 0x3C0000
 
 
 

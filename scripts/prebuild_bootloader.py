@@ -23,7 +23,13 @@ def _bootloader_needs_rebuild() -> bool:
 def _run_bootloader_build(source, target, env):
     if env.subst("$PIOENV") == BOOTLOADER_ENV:
         return
+    if os.environ.get("M5OS_SKIP_BOOTLOADER_BUILD", "").strip() in ("1", "true", "yes"):
+        print("M5 OS: skip custom bootloader build (M5OS_SKIP_BOOTLOADER_BUILD)")
+        return
     VARIANT_DIR.mkdir(parents=True, exist_ok=True)
+    if BOOTLOADER_DST.is_file() and not _bootloader_needs_rebuild():
+        print("M5 OS: using existing custom bootloader -> %s" % BOOTLOADER_DST)
+        return
     if not _bootloader_needs_rebuild():
         return
     cmd = [sys.executable, "-m", "platformio", "run", "-e", BOOTLOADER_ENV, "-t", "bootloader"]
