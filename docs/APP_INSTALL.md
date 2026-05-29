@@ -103,7 +103,7 @@ Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub o
 |---------|--------|
 | HTTPS whitelist | Downloads from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, `hackerplanet.dev`, `api.launcherhub.net`, `m5burner-cdn.m5stack.com` |
 | SHA256 | Optional per manifest entry; verified on download and before flash |
-| Size limit | App bins capped at **3 MiB** (`kMaxAppBinBytes`) — matches default 8 MB OTA slot |
+| Size limit | App bins capped at **~3.94 MiB** (`kMaxAppBinBytes` = 0x3F0000) — matches `partitions/m5os_cardputer_8MB.csv` OTA slot |
 | Path safety | No `..` or slashes in bin names; slugs sanitized |
 | Launch confirm | User must confirm before any OTA write; failed flash leaves launcher intact |
 | No partition-0 flash | M5 OS never writes bootloader/partition table from the menu — USB/M5Burner only |

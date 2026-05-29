@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 namespace m5os {
 
 // SD layout (Cardputer microSD SPI — docs.m5stack.com microSD socket)
@@ -25,7 +27,7 @@ static const char* kDefaultManifestUrl = M5OS_MANIFEST_URL;
 static const char* kAppRemotePossibility = "remote_possibility";
 static const char* kAppBleBot = "ble_bot";
 
-/** Max app .bin size for SD download + Update flash (default_8MB OTA slot ≈ 3 MiB). */
-static const size_t kMaxAppBinBytes = 3145728;
+/** Max app .bin for SD + OTA (smaller slot in partitions/m5os_cardputer_8MB.csv). */
+static const size_t kMaxAppBinBytes = 0x3F0000;
 
 }  // namespace m5os

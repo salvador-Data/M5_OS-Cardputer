@@ -2,6 +2,7 @@
 
 #include "m5burner_hookup.h"
 #include "m5os_config.h"
+#include "m5os_flash.h"
 #include "m5os_security.h"
 #include "serial_log.h"
 #include "ui_display.h"
@@ -53,6 +54,17 @@ bool parseVersionObject(JsonObject versionObj, BurnerVersionInfo& info) {
     return true;
 }
 
+void appendDataSlice(BurnerInstallPlan& plan, JsonObject part) {
+    const uint32_t copySize = part["copy_size"] | 0;
+    if (copySize == 0) return;
+    BurnerDataSlice slice;
+    slice.subtype = String(part["subtype"] | "");
+    slice.label = String(part["label"] | "");
+    slice.sourceOffset = part["source_offset"] | 0;
+    slice.copySize = copySize;
+    plan.dataSlices.push_back(slice);
+}
+
 bool parseInstallManifest(JsonObject detail, const String& version, BurnerInstallPlan& plan) {
     JsonObject versionObj = detail["version"].as<JsonObject>();
     if (versionObj.isNull()) return false;
@@ -64,7 +76,8 @@ bool parseInstallManifest(JsonObject detail, const String& version, BurnerInstal
     plan.appOffset = 0;
     plan.appSize = 0;
     plan.noBootloader = true;
-    plan.requiresExtraPartitions = false;
+    plan.dataSlices.clear();
+    plan.fromManifest = true;
 
     JsonObject install = versionObj["install"].as<JsonObject>();
     if (!install.isNull()) {
@@ -85,8 +98,7 @@ bool parseInstallManifest(JsonObject detail, const String& version, BurnerInstal
                     plan.noBootloader = plan.appOffset == 0;
                 } else if (type == "data" &&
                            (subtype == "spiffs" || subtype == "fat")) {
-                    const uint32_t copySize = part["copy_size"] | 0;
-                    if (copySize > 0) plan.requiresExtraPartitions = true;
+                    appendDataSlice(plan, part);
                 }
             }
         }
@@ -105,7 +117,7 @@ bool finalizePlanSize(BurnerInstallPlan& plan) {
         if (!plan.noBootloader && plan.appOffset == 0) return false;
         plan.noBootloader = true;
     }
-    if (plan.appSize > kMaxAppBinBytes) return false;
+    if (plan.appSize > maxOtaAppBytes()) return false;
     return plan.downloadUrl.length() > 0;
 }
 
@@ -155,9 +167,55 @@ bool writeFlashChunk(RangeFlashContext& ctx, const uint8_t* data, size_t len) {
     return true;
 }
 
+bool streamRangeToFile(const String& url, uint32_t offset, size_t imageSize, File& out,
+                       const char* progressLabel) {
+    if (!security::isAllowedHttpsUrl(url)) return false;
+    if (imageSize == 0) return false;
+
+    HTTPClient http;
+    http.begin(url);
+    http.setTimeout(30000);
+    applyBurnerDownloadHeaders(http, url);
+    const uint32_t endByte = offset + static_cast<uint32_t>(imageSize) - 1;
+    http.addHeader("Range", "bytes=" + String(offset) + "-" + String(endByte));
+    const int code = http.GET();
+    if (code != HTTP_CODE_OK && code != HTTP_CODE_PARTIAL_CONTENT) {
+        http.end();
+        log::info("burner_range_fail", String(code));
+        return false;
+    }
+
+    WiFiClient* stream = http.getStreamPtr();
+    size_t written = 0;
+    uint8_t buffer[512];
+    while (written < imageSize && (stream->connected() || stream->available())) {
+        const size_t avail = stream->available();
+        if (!avail) {
+            delay(1);
+            continue;
+        }
+        const size_t want = min(avail, min(sizeof(buffer), imageSize - written));
+        const int read = stream->readBytes(buffer, want);
+        if (read <= 0) break;
+        if (out.write(buffer, static_cast<size_t>(read)) != static_cast<size_t>(read)) {
+            http.end();
+            return false;
+        }
+        written += static_cast<size_t>(read);
+        if (progressLabel && (written % 8192 == 0 || written == imageSize)) {
+            ui::drawHeader(progressLabel);
+            m5os::lcd().setCursor(4, 44);
+            m5os::lcd().printf("%u / %u", static_cast<unsigned>(written),
+                               static_cast<unsigned>(imageSize));
+        }
+    }
+    http.end();
+    return written == imageSize;
+}
+
 bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut) {
     if (!security::isAllowedHttpsUrl(url)) return false;
-    if (imageSize == 0 || imageSize > kMaxAppBinBytes) return false;
+    if (imageSize == 0 || imageSize > maxOtaAppBytes()) return false;
 
     HTTPClient http;
     http.begin(url);
@@ -193,7 +251,7 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
             return false;
         }
         if (ctx.written % 8192 == 0 || ctx.written == imageSize) {
-            ui::drawHeader("Flashing");
+            ui::drawHeader("Flashing app");
             m5os::lcd().setCursor(4, 44);
             m5os::lcd().printf("%u / %u", static_cast<unsigned>(ctx.written),
                                static_cast<unsigned>(imageSize));
@@ -210,6 +268,44 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
         log::info("burner_end_fail", String(Update.errorString()));
         return false;
     }
+    return true;
+}
+
+String sdExtraPathFromApp(const String& appSdPath, const BurnerDataSlice& slice) {
+    if (!appSdPath.length() || slice.copySize == 0) return "";
+    const int slash = appSdPath.lastIndexOf('/');
+    if (slash < 0) return "";
+    String dir = appSdPath.substring(0, slash);
+    String name = slice.subtype;
+    if (slice.label.length()) name += "_" + slice.label;
+    return dir + "/" + name + ".bin";
+}
+
+bool applyVersionInfo(const BurnerVersionInfo& info, BurnerInstallPlan& plan) {
+    plan.version = info.version;
+    plan.file = info.file;
+    plan.appOffset = info.appOffset;
+    plan.appSize = info.appSize;
+    plan.noBootloader = info.noBootloader;
+    plan.fromManifest = false;
+    plan.dataSlices.clear();
+    return true;
+}
+
+bool fetchInstallManifest(const String& fid, const String& version, BurnerInstallPlan& plan) {
+    if (!version.length()) return false;
+    const String encodedVersion = urlEncodeQueryComponent(version);
+    const String detailUrl =
+        String(kLauncherHubCatalogBase) + "?fid=" + fid + "&version=" + encodedVersion;
+    const String detailPayload = httpGetPayload(detailUrl);
+    if (!detailPayload.length()) return false;
+
+    JsonDocument detail;
+    if (deserializeJson(detail, detailPayload)) return false;
+    BurnerInstallPlan manifestPlan = plan;
+    if (!parseInstallManifest(detail.as<JsonObject>(), version, manifestPlan)) return false;
+    plan = manifestPlan;
+    plan.fid = fid;
     return true;
 }
 
@@ -240,60 +336,46 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
     plan.fid = security::normalizeBurnerFid(fid);
     if (!plan.fid.length() || WiFi.status() != WL_CONNECTED) return false;
 
-    bool parsed = false;
-    if (version.length()) {
-        const String encodedVersion = urlEncodeQueryComponent(version);
-        const String detailUrl =
-            String(kLauncherHubCatalogBase) + "?fid=" + plan.fid + "&version=" + encodedVersion;
-        const String detailPayload = httpGetPayload(detailUrl);
+    std::vector<BurnerVersionInfo> versions;
+    if (!fetchVersionList(plan.fid, versions)) return false;
 
-        if (detailPayload.length()) {
-            JsonDocument detail;
-            if (!deserializeJson(detail, detailPayload)) {
-                JsonObject root = detail.as<JsonObject>();
-                parsed = parseInstallManifest(root, version, plan);
-            }
-        }
+    String targetVersion = version;
+    const BurnerVersionInfo* picked = nullptr;
+    for (const auto& info : versions) {
+        if (version.length() && info.version != version) continue;
+        picked = &info;
+        break;
+    }
+    if (!picked) picked = &versions[0];
+    if (!targetVersion.length()) targetVersion = picked->version;
+
+    applyVersionInfo(*picked, plan);
+
+    if (fetchInstallManifest(plan.fid, targetVersion, plan) && fillPlanDownloadUrl(plan)) {
+        // Manifest is authoritative for app slice + SPIFFS/FAT metadata.
+    } else {
+        applyVersionInfo(*picked, plan);
+        if (!fillPlanDownloadUrl(plan)) return false;
     }
 
-    if (!parsed) {
-        std::vector<BurnerVersionInfo> versions;
-        if (!fetchVersionList(plan.fid, versions)) return false;
-        for (const auto& info : versions) {
-            if (version.length() && info.version != version) continue;
-            plan.version = info.version;
-            plan.file = info.file;
-            plan.appOffset = info.appOffset;
-            plan.appSize = info.appSize;
-            plan.noBootloader = info.noBootloader;
-            parsed = true;
-            break;
-        }
-        if (!parsed && !versions.empty()) {
-            const auto& latest = versions[0];
-            plan.version = latest.version;
-            plan.file = latest.file;
-            plan.appOffset = latest.appOffset;
-            plan.appSize = latest.appSize;
-            plan.noBootloader = latest.noBootloader;
-            parsed = true;
-        }
-    }
+    const size_t otaLimit = maxOtaAppBytes();
 
-    if (!parsed || !fillPlanDownloadUrl(plan)) return false;
-
-    if (plan.appSize == 0 && plan.noBootloader) {
+    if (plan.appSize == 0) {
         size_t remoteSize = 0;
         if (!probeRemoteSize(plan.downloadUrl, remoteSize)) return false;
-        if (remoteSize > kMaxAppBinBytes) return false;
-        plan.appSize = static_cast<uint32_t>(remoteSize);
-    } else if (plan.appSize == 0 && plan.appOffset > 0) {
-        size_t remoteSize = 0;
-        if (!probeRemoteSize(plan.downloadUrl, remoteSize)) return false;
-        if (remoteSize <= plan.appOffset) return false;
-        const size_t slice = remoteSize - plan.appOffset;
-        if (slice > kMaxAppBinBytes) return false;
-        plan.appSize = static_cast<uint32_t>(slice);
+
+        if (plan.appOffset > 0) {
+            if (remoteSize <= plan.appOffset) return false;
+            const size_t slice = remoteSize - plan.appOffset;
+            if (slice > otaLimit) return false;
+            plan.appSize = static_cast<uint32_t>(slice);
+            plan.noBootloader = false;
+        } else if (plan.noBootloader) {
+            if (remoteSize > otaLimit) return false;
+            plan.appSize = static_cast<uint32_t>(remoteSize);
+        } else {
+            return false;
+        }
     }
 
     return finalizePlanSize(plan);
@@ -301,17 +383,13 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
 
 BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdPath) {
     BurnerFlashResult result;
-    if (plan.requiresExtraPartitions) {
-        result.message = "SPIFFS/FAT install unsupported";
-        log::info("burner_extra_parts");
-        return result;
-    }
     if (WiFi.status() != WL_CONNECTED) {
         result.message = "WiFi required";
         return result;
     }
-    if (!plan.downloadUrl.length() || plan.appSize == 0 || plan.appSize > kMaxAppBinBytes) {
-        result.message = "Invalid install plan";
+    const size_t otaLimit = maxOtaAppBytes();
+    if (!plan.downloadUrl.length() || plan.appSize == 0 || plan.appSize > otaLimit) {
+        result.message = plan.appSize > otaLimit ? "App too large for OTA slot" : "Invalid install plan";
         return result;
     }
 
@@ -329,7 +407,11 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
     m5os::lcd().setCursor(4, 28);
     m5os::lcd().println(plan.version.length() ? plan.version : plan.file);
     m5os::lcd().setCursor(4, 44);
-    m5os::lcd().printf("%u bytes", static_cast<unsigned>(plan.appSize));
+    m5os::lcd().printf("App %u bytes", static_cast<unsigned>(plan.appSize));
+    if (!plan.dataSlices.empty()) {
+        m5os::lcd().setCursor(4, 58);
+        m5os::lcd().print("Assets -> SD only");
+    }
 
     const uint32_t offset = plan.noBootloader ? 0 : plan.appOffset;
     const bool ok = streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr);
@@ -341,8 +423,40 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
         return result;
     }
 
+    for (const auto& slice : plan.dataSlices) {
+        if (slice.copySize == 0) continue;
+        const String extraPath = sdExtraPathFromApp(sdPath, slice);
+        if (!extraPath.length()) continue;
+
+        ui::drawHeader("Saving assets");
+        m5os::lcd().setCursor(4, 28);
+        m5os::lcd().println(slice.subtype + (slice.label.length() ? ":" + slice.label : ""));
+
+        File extraOut = SD.open(extraPath.c_str(), FILE_WRITE);
+        if (!extraOut) {
+            log::info("burner_extra_sd_fail", extraPath);
+            continue;
+        }
+        const bool saved = streamRangeToFile(plan.downloadUrl, slice.sourceOffset, slice.copySize,
+                                             extraOut, "Saving assets");
+        extraOut.close();
+        if (!saved) {
+            SD.remove(extraPath.c_str());
+            log::info("burner_extra_incomplete", extraPath);
+            continue;
+        }
+        result.savedExtraToSd = true;
+        log::info("burner_extra_saved", extraPath);
+    }
+
     result.ok = true;
-    result.message = "Rebooting into app";
+    if (result.savedExtraToSd) {
+        result.message = "Rebooting (assets on SD)";
+    } else if (!plan.dataSlices.empty()) {
+        result.message = "Rebooting (app only)";
+    } else {
+        result.message = "Rebooting into app";
+    }
     log::info("burner_flash_ok", plan.version);
     ui::showMessage("M5Burner", result.message, TFT_GREEN, 1200);
     delay(300);

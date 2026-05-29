@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
@@ -12,7 +12,9 @@ LAUNCHER_HUB_CATALOG_BASE = "https://api.launcherhub.net/firmwares"
 LAUNCHER_HUB_DOWNLOAD_BASE = "https://api.launcherhub.net/download"
 M5_BURNER_CDN_BASE = "https://m5burner-cdn.m5stack.com/firmware/"
 BURNER_CATEGORY = "cardputer"
-MAX_APP_BIN_BYTES = 3145728
+# Smaller OTA slot in partitions/m5os_cardputer_8MB.csv (app0 = 0x3F0000).
+MAX_APP_BIN_BYTES = 0x3F0000
+MAX_OTA_APP1_BYTES = 0x400000
 
 FID_HEX = re.compile(r"^[0-9a-fA-F]{32}$")
 BURNER_FILE = re.compile(r"^[A-Za-z0-9._-]+\.bin$")
@@ -75,6 +77,14 @@ def default_burner_cache_dir() -> str:
 
 
 @dataclass
+class BurnerDataSlice:
+    subtype: str
+    label: str = ""
+    source_offset: int = 0
+    copy_size: int = 0
+
+
+@dataclass
 class BurnerInstallPlan:
     fid: str
     version: str
@@ -83,7 +93,8 @@ class BurnerInstallPlan:
     app_offset: int = 0
     app_size: int = 0
     no_bootloader: bool = False
-    requires_extra_partitions: bool = False
+    from_manifest: bool = False
+    data_slices: list[BurnerDataSlice] = field(default_factory=list)
 
 
 def parse_version_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -119,13 +130,13 @@ def parse_content_range_total(content_range: str) -> int:
     return total if total > 0 else 0
 
 
-def finalize_plan_size(plan: BurnerInstallPlan) -> bool:
-    """Mirror finalizePlanSize — SPIFFS/FAT flagged but not rejected here."""
+def finalize_plan_size(plan: BurnerInstallPlan, ota_limit: int = MAX_OTA_APP1_BYTES) -> bool:
+    """Mirror finalizePlanSize — app slice must fit inactive OTA slot."""
     if plan.app_size == 0:
         if not plan.no_bootloader and plan.app_offset == 0:
             return False
         plan.no_bootloader = True
-    if plan.app_size > MAX_APP_BIN_BYTES:
+    if plan.app_size > ota_limit:
         return False
     return bool(plan.download_url)
 
@@ -141,7 +152,7 @@ def build_install_plan(
     safe_fid = normalize_fid(fid)
     parsed: BurnerInstallPlan | None = None
 
-    if version and detail is not None:
+    if detail is not None:
         try:
             parsed = parse_install_manifest(detail, version)
         except ValueError:
@@ -176,7 +187,7 @@ def build_install_plan(
     if parsed is None:
         return None
 
-    if parsed.app_size == 0 and parsed.no_bootloader:
+    if parsed.app_size == 0:
         return None
     if not finalize_plan_size(parsed):
         return None
@@ -190,12 +201,13 @@ def parse_install_manifest(detail: dict[str, Any], version: str = "") -> BurnerI
         raise ValueError("missing version object")
     file_name = sanitize_burner_file(str(version_obj.get("file", "")))
     resolved_version = version or str(version_obj.get("version", "")).strip()
-    fid = normalize_fid(str(detail.get("fid") or ""))
+    fid_raw = str(detail.get("fid") or "")
+    fid = normalize_fid(fid_raw) if fid_raw else ""
 
     app_offset = 0
     app_size = 0
     no_bootloader = True
-    requires_extra = False
+    data_slices: list[BurnerDataSlice] = []
 
     install = version_obj.get("install") or {}
     if isinstance(install, dict):
@@ -216,19 +228,28 @@ def parse_install_manifest(detail: dict[str, Any], version: str = "") -> BurnerI
                     app_size = int(part.get("copy_size") or app_size)
                     no_bootloader = app_offset == 0
                 elif ptype == "data" and subtype in {"spiffs", "fat"}:
-                    if int(part.get("copy_size") or 0) > 0:
-                        requires_extra = True
+                    copy_size = int(part.get("copy_size") or 0)
+                    if copy_size > 0:
+                        data_slices.append(
+                            BurnerDataSlice(
+                                subtype=subtype,
+                                label=str(part.get("label") or ""),
+                                source_offset=int(part.get("source_offset") or 0),
+                                copy_size=copy_size,
+                            )
+                        )
 
-    if app_size > MAX_APP_BIN_BYTES:
+    if app_size > MAX_OTA_APP1_BYTES:
         raise ValueError("app slice exceeds M5 OS OTA limit")
 
     return BurnerInstallPlan(
         fid=fid,
         version=resolved_version,
         file=file_name,
-        download_url=resolve_download_url(fid, file_name),
+        download_url=resolve_download_url(fid, file_name) if fid else resolve_file_url(file_name),
         app_offset=app_offset,
         app_size=app_size,
         no_bootloader=no_bootloader,
-        requires_extra_partitions=requires_extra,
+        from_manifest=True,
+        data_slices=data_slices,
     )

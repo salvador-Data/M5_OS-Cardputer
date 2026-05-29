@@ -68,8 +68,8 @@ def test_import_with_fid_file_builds_launcherhub_url(tmp_path: Path) -> None:
 
 def test_rejects_oversized_bin(tmp_path: Path) -> None:
     bin_path = tmp_path / "huge.bin"
-    # 3 MiB + 1 byte exceeds kMaxAppBinBytes
-    bin_path.write_bytes(b"\xff" * (3145728 + 1))
+    # 0x3F0000 + 1 byte exceeds kMaxAppBinBytes
+    bin_path.write_bytes(b"\xff" * (0x3F0000 + 1))
     result = run_importer("--bin", str(bin_path), "--name", "Huge")
     assert result.returncode != 0
     assert "exceeds" in result.stderr.lower()

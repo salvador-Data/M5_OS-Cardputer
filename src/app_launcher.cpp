@@ -3,6 +3,7 @@
 #include "burner_install.h"
 #include "m5burner_hookup.h"
 #include "m5os_config.h"
+#include "m5os_flash.h"
 #include "m5os_vfs.h"
 #include "m5os_security.h"
 #include "serial_log.h"
@@ -39,7 +40,8 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     }
 
     const size_t firmwareSize = firmware.size();
-    if (firmwareSize == 0 || firmwareSize > kMaxAppBinBytes) {
+    const size_t otaLimit = maxOtaAppBytes();
+    if (firmwareSize == 0 || firmwareSize > otaLimit) {
         firmware.close();
         result.message = firmwareSize ? "App too large for OTA slot" : "Empty bin file";
         log::info("launch_size_rejected", safeBin);
@@ -127,16 +129,12 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
     burner::BurnerInstallPlan plan;
     const String pickVersion = version.length() ? version : pkg.version;
     if (!burner::buildInstallPlan(pkg.fid, pickVersion == "burner" ? "" : pickVersion, plan)) {
-        if (plan.appSize > kMaxAppBinBytes) {
+        if (plan.appSize > maxOtaAppBytes()) {
             result.message = "App too large for OTA slot";
         } else {
             result.message = "Install info failed";
         }
         log::info("burner_plan_fail", pkg.name);
-        return result;
-    }
-    if (plan.requiresExtraPartitions) {
-        result.message = "SPIFFS/FAT not supported";
         return result;
     }
 

@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.m5burner_hookup import (  # noqa: E402
+    MAX_APP_BIN_BYTES,
+    MAX_OTA_APP1_BYTES,
     BurnerInstallPlan,
     build_install_plan,
     install_detail_url,
@@ -31,6 +33,11 @@ TEST_HWID = "AA:BB:CC:DD:EE:FF"
 def _fetch_json(url: str) -> dict:
     with urllib.request.urlopen(url) as response:
         return json.load(response)
+
+
+def test_max_app_bin_bytes_matches_partition_table() -> None:
+    assert MAX_APP_BIN_BYTES == 0x3F0000
+    assert MAX_OTA_APP1_BYTES == 0x400000
 
 
 def test_parse_version_entry_matches_boris_fields() -> None:
@@ -84,7 +91,7 @@ def test_parse_install_manifest_builds_download_url() -> None:
     assert plan.download_url == resolve_download_url(fid, plan.file)
 
 
-def test_parse_install_manifest_flags_spiffs() -> None:
+def test_parse_install_manifest_collects_spiffs_slices() -> None:
     fid = BRUCE_FID
     detail = {
         "fid": fid,
@@ -92,16 +99,17 @@ def test_parse_install_manifest_flags_spiffs() -> None:
             "version": "1.0.0",
             "file": "demo.bin",
             "install": {
-                "app": {"source_offset": 0, "image_size": 1000},
+                "app": {"source_offset": 65536, "image_size": 1000},
                 "partitions": [
-                    {"type": "data", "subtype": "spiffs", "copy_size": 4096},
+                    {"type": "data", "subtype": "spiffs", "copy_size": 4096, "source_offset": 9000},
                 ],
             },
         },
     }
     plan = parse_install_manifest(detail)
-    assert plan.requires_extra_partitions is True
-    assert plan.no_bootloader is True
+    assert len(plan.data_slices) == 1
+    assert plan.data_slices[0].subtype == "spiffs"
+    assert plan.data_slices[0].copy_size == 4096
 
 
 def test_install_detail_url_encodes_version() -> None:
@@ -111,7 +119,7 @@ def test_install_detail_url_encodes_version() -> None:
 
 
 def test_build_install_plan_spiffs_app_not_rejected() -> None:
-    """SPIFFS apps must build a plan; flash layer rejects extra partitions."""
+    """SPIFFS metadata must not block install plan — flash saves assets to SD."""
     detail = {
         "fid": BRUCE_FID,
         "version": {
@@ -120,15 +128,25 @@ def test_build_install_plan_spiffs_app_not_rejected() -> None:
             "install": {
                 "app": {"source_offset": 65536, "image_size": 512000},
                 "partitions": [
-                    {"type": "data", "subtype": "spiffs", "copy_size": 4096},
+                    {"type": "data", "subtype": "spiffs", "copy_size": 4096, "source_offset": 800000},
                 ],
             },
         },
     }
     plan = build_install_plan(BRUCE_FID, "1.15", detail=detail)
     assert plan is not None
-    assert plan.requires_extra_partitions is True
+    assert len(plan.data_slices) == 1
     assert plan.app_size == 512000
+
+
+def test_bruce_live_manifest_fits_ota_slot() -> None:
+    version_list = _fetch_json(version_url(BRUCE_FID))
+    version = version_list["versions"][0]["version"]
+    detail = _fetch_json(install_detail_url(BRUCE_FID, version))
+    plan = build_install_plan(BRUCE_FID, version, detail=detail, version_list=version_list)
+    assert plan is not None
+    assert plan.app_size <= MAX_OTA_APP1_BYTES
+    assert plan.app_size == detail["version"]["install"]["app"]["image_size"]
 
 
 def test_build_install_plan_empty_version_uses_version_list() -> None:
@@ -137,6 +155,7 @@ def test_build_install_plan_empty_version_uses_version_list() -> None:
     assert plan is not None
     assert plan.version == version_list["versions"][0]["version"]
     assert plan.app_size > 0
+    assert plan.app_size <= MAX_OTA_APP1_BYTES
 
 
 def test_launcherhub_download_requires_hwid() -> None:
@@ -170,6 +189,7 @@ def test_live_m5launcher_install_manifest_roundtrip() -> None:
     plan = build_install_plan(M5LAUNCHER_FID, version, detail=detail, version_list=version_list)
     assert plan is not None
     assert plan.app_size == detail["version"]["install"]["app"]["image_size"]
+    assert plan.app_size < MAX_APP_BIN_BYTES
 
     req = urllib.request.Request(
         plan.download_url,
@@ -178,3 +198,22 @@ def test_live_m5launcher_install_manifest_roundtrip() -> None:
     with urllib.request.urlopen(req) as response:
         assert response.status == 206
         assert len(response.read()) == 2
+
+
+def test_oversized_app_rejected() -> None:
+    detail = {
+        "fid": M5LAUNCHER_FID,
+        "version": {
+            "version": "9.9.9",
+            "file": "huge.bin",
+            "install": {
+                "app": {"source_offset": 0, "image_size": MAX_OTA_APP1_BYTES + 1},
+                "partitions": [],
+            },
+        },
+    }
+    try:
+        parse_install_manifest(detail)
+        raise AssertionError("expected oversized app to fail")
+    except ValueError as exc:
+        assert "OTA limit" in str(exc)
