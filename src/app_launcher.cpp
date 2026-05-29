@@ -61,29 +61,30 @@ constexpr size_t kIoChunkBytes = 64;
 
 
 struct LaunchProgressCtx {
-
-    const char* label;
-
-    String detailPrefix;
-
+    String appLabel;
+    const char* phase;
 };
-
-
 
 LaunchProgressCtx gHashProgressCtx;
 
+void paintLoadAppPhase(int percent, const String& appLabel, const char* phase, const String& extra = "") {
+    String detail = appLabel + "\n" + String(phase);
+    if (extra.length()) detail += "\n" + extra;
+    ui::showFlashProgress(percent, "Load app", detail);
+    m5os::update();
+}
 
+void surfaceLaunchFailure(const String& appLabel, LaunchResult& result) {
+    paintLoadAppPhase(0, appLabel, "Failed", result.message);
+    ui::showMessage("Load app failed", result.message, TFT_RED);
+}
 
 void paintLaunchProgress(size_t done, size_t total, LaunchProgressCtx* ctx) {
-
-    if (!ctx || !ctx->label || total == 0) return;
-
+    if (!ctx || total == 0) return;
     const int pct = static_cast<int>(min(100ULL, (done * 100ULL) / total));
-
-    ui::showFlashProgress(pct, ctx->label, ctx->detailPrefix + "\n" + String(done) + " / " + String(total));
-
+    String detail = ctx->appLabel + "\n" + String(ctx->phase) + "\n" + String(done) + " / " + String(total);
+    ui::showFlashProgress(pct, "Load app", detail);
     m5os::update();
-
 }
 
 
@@ -202,10 +203,8 @@ void storeLaunchCache(const String& binFile, const String& sha256, size_t firmwa
 
 
 
-bool copySdToOta(File& firmware, size_t firmwareSize, const String& safeBin, LaunchResult& result) {
-
-    LaunchProgressCtx ctx{"Copy to run slot", safeBin + "\nfrom SD (no WiFi)"};
-
+bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, LaunchResult& result) {
+    LaunchProgressCtx ctx{appLabel, "Copy to run slot"};
     paintLaunchProgress(0, firmwareSize, &ctx);
 
 
@@ -309,155 +308,82 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& safeBin, Lau
 
 
 LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, const String& label,
-
                                 const FirmwarePackage* meta) {
-
     LaunchResult result;
 
-
-
     ui::showFlashProgress(0, "Load app", label + "\nStarting...");
-
     m5os::update();
 
-
-
     if (meta && meta->needsFlashSpiffs) {
-
         result.message =
-
             "Needs SPIFFS on flash.\nUse M5Burner USB\nfull flash to run.\n(App on SD OK)";
-
         log::info("launch_spiffs_blocked", cacheKey);
-
+        surfaceLaunchFailure(label, result);
         return result;
-
     }
-
-
 
     File firmware = SD.open(path.c_str());
-
     if (!firmware) {
-
-        result.message = "Cannot open bin";
-
+        result.message = "Cannot open bin\n" + path;
         log::info("launch_open_fail", path);
-
+        surfaceLaunchFailure(label, result);
         return result;
-
     }
-
-
 
     const size_t firmwareSize = firmware.size();
-
     const size_t otaLimit = maxOtaAppBytes();
-
     if (firmwareSize == 0 || firmwareSize > otaLimit) {
-
         firmware.close();
-
         result.message = firmwareSize ? "App too large for OTA slot" : "Empty bin file";
-
         log::info("launch_size_rejected", cacheKey);
-
+        surfaceLaunchFailure(label, result);
         return result;
-
     }
-
-
 
     const uint32_t fileMtime = static_cast<uint32_t>(firmware.getLastWrite());
-
     String sdDigest;
-
     const bool hashSkipped = tryLoadCachedDigest(cacheKey, firmwareSize, fileMtime, sdDigest);
 
-
-
     if (hashSkipped) {
-
-        ui::showFlashProgress(100, "Hashing", label + "\nUnchanged — skip hash");
-
-        m5os::update();
-
+        paintLoadAppPhase(100, label, "Hashing", "Unchanged — skip hash");
         log::info("launch_hash_skip", cacheKey);
-
     } else {
-
-        ui::showFlashProgress(0, "Hashing", label + "\nVerifying SD file");
-
-        m5os::update();
-
-        gHashProgressCtx = {"Hashing", label + "\nVerifying SD file"};
-
+        paintLoadAppPhase(0, label, "Hashing", "Verifying SD file");
+        gHashProgressCtx = {label, "Hashing"};
         sdDigest =
-
             security::computeFileSha256HexWithProgress(firmware, firmwareSize, hashProgressShim);
-
         if (!sdDigest.length()) {
-
             firmware.close();
-
             result.message = "Hash failed";
-
+            surfaceLaunchFailure(label, result);
             return result;
-
         }
-
     }
-
-
 
     if (meta && meta->sha256.length()) {
-
         if (!security::sha256Equal(meta->sha256, sdDigest)) {
-
             firmware.close();
-
             result.message = "SHA256 mismatch";
-
             log::info("launch_checksum_fail", cacheKey);
-
+            surfaceLaunchFailure(label, result);
             return result;
-
         }
-
         log::info("launch_checksum_ok", cacheKey);
-
     } else if (meta) {
-
         log::info("launch_checksum_skip", cacheKey);
-
     } else {
-
         log::info("launch_checksum_skip", cacheKey);
-
     }
-
-
 
     beginLaunchSession();
 
-
-
     if (canSkipFlashToCachedOta(cacheKey, sdDigest)) {
-
         firmware.close();
-
-        ui::showFlashProgress(100, "Load app", label + "\nAlready loaded — reboot");
-
-        m5os::update();
-
+        paintLoadAppPhase(100, label, "Rebooting", "Already loaded");
         result.ok = true;
-
         result.skippedFlash = true;
-
         result.message = "Rebooting into app";
-
         log::info("launch_cached_ok", cacheKey);
-
         ui::showMessage("Load app", label + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
 
         if (!resolveLaunchBootPartition()) {
@@ -465,6 +391,7 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
             result.ok = false;
             result.message = "Run slot empty\nor invalid image";
             log::info("launch_resolve_fail", "cached");
+            surfaceLaunchFailure(label, result);
             return result;
         }
 
@@ -474,54 +401,34 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
         result.ok = false;
         result.message = "Reboot failed\nCheck serial log";
         log::info("launch_reboot_fail", "cached");
+        surfaceLaunchFailure(label, result);
         return result;
-
     }
 
-
-
     firmware.close();
-
-
 
     firmware = SD.open(path.c_str());
-
     if (!firmware) {
-
-        result.message = "Cannot reopen bin for copy";
-
+        result.message = "Cannot reopen bin for copy\n" + path;
         log::info("launch_reopen_fail", path);
-
+        surfaceLaunchFailure(label, result);
         return result;
-
     }
-
-
 
     if (!copySdToOta(firmware, firmwareSize, label, result)) {
-
         firmware.close();
-
         cancelLaunchSession();
-
+        surfaceLaunchFailure(label, result);
         return result;
-
     }
-
     firmware.close();
-
-
 
     storeLaunchCache(cacheKey, sdDigest, firmwareSize, fileMtime);
 
-
-
+    paintLoadAppPhase(100, label, "Rebooting");
     result.ok = true;
-
     result.message = "Rebooting into app";
-
     log::info("launch_ok", cacheKey);
-
     ui::showMessage("Load app", label + "\nRebooting...", TFT_GREEN, 1200);
 
     if (!resolveLaunchBootPartition()) {
@@ -529,6 +436,7 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
         result.ok = false;
         result.message = "Copy OK but run slot\ninvalid — re-copy app";
         log::info("launch_resolve_fail", "copy");
+        surfaceLaunchFailure(label, result);
         return result;
     }
 
@@ -538,8 +446,8 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
     result.ok = false;
     result.message = "Copy OK, reboot failed\nCheck serial log";
     log::info("launch_reboot_fail", "copy");
+    surfaceLaunchFailure(label, result);
     return result;
-
 }
 
 
@@ -553,105 +461,75 @@ AppLauncher::AppLauncher(FirmwareCatalog& catalog) : catalog_(catalog) {}
 
 
 LaunchResult AppLauncher::launchBinFile(const String& binFile) {
-
     LaunchResult result;
-
     const String safeBin = security::sanitizeBinFilename(binFile);
+    const String uiLabel = safeBin.length() ? safeBin : binFile;
+
+    ui::showFlashProgress(0, "Load app", uiLabel + "\nStarting...");
+    m5os::update();
 
     if (!safeBin.length()) {
-
         result.message = "Invalid bin filename";
-
         log::info("launch_bin_rejected");
-
+        surfaceLaunchFailure(uiLabel, result);
         return result;
-
     }
 
-
-
     String path;
-
     const FirmwarePackage* meta = catalog_.findByBinFile(safeBin);
-
     if (meta) {
-
         path = catalog_.binPathForPackage(*meta);
-
     } else {
-
         path = catalog_.binPathFor(safeBin);
-
     }
 
     if (!path.length() || !SD.exists(path.c_str())) {
-
         result.message = "Missing " + safeBin;
-
+        if (path.length()) result.message += "\n" + path;
         log::info("launch_missing", path);
-
+        surfaceLaunchFailure(safeBin, result);
         return result;
-
     }
 
-
-
     return launchFromOpenFile(path, safeBin, safeBin, meta);
-
 }
 
 
 
 LaunchResult AppLauncher::launchBinPath(const String& sdPath) {
-
     LaunchResult result;
-
     String path = sdPath;
-
     path.trim();
-
     if (!path.startsWith("/")) path = "/" + path;
 
+    const int slash = path.lastIndexOf('/');
+    const String leaf = slash >= 0 ? path.substring(slash + 1) : path;
+
+    ui::showFlashProgress(0, "Load app", leaf + "\nStarting...");
+    m5os::update();
+
     if (!path.endsWith(".bin")) {
-
         result.message = "Not a .bin file";
-
+        surfaceLaunchFailure(leaf, result);
         return result;
-
     }
 
     if (!SD.exists(path.c_str())) {
-
         result.message = "Missing file\n" + path;
-
         log::info("launch_path_missing", path);
-
+        surfaceLaunchFailure(leaf, result);
         return result;
-
     }
-
-
-
-    const int slash = path.lastIndexOf('/');
-
-    const String leaf = slash >= 0 ? path.substring(slash + 1) : path;
 
     const String safeBin = security::sanitizeBinFilename(leaf);
-
     if (!safeBin.length()) {
-
         result.message = "Invalid bin filename";
-
+        surfaceLaunchFailure(leaf, result);
         return result;
-
     }
 
-
-
     const FirmwarePackage* meta = catalog_.findByBinFile(safeBin);
-
     return launchFromOpenFile(path, path, leaf, meta);
-
 }
 
 

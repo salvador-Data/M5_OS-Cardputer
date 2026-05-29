@@ -145,12 +145,13 @@ void LauncherMenu::showAppSwitcher() {
             m5os::keyboardDrainEnter();
             while (true) {
                 m5os::update();
-                if (m5os::keyboardBackJustPressed()) break;
-                if (m5os::keyboardEnterJustPressed()) {
+                Buttons keys = ui::readButtonsExtended();
+                if (keys.back || m5os::keyboardBackJustPressed()) break;
+                if (keys.ok || m5os::keyboardEnterJustPressed()) {
                     ui::showFlashProgress(0, "Load app", pkg.name + "\nStarting...");
                     m5os::update();
                     LaunchResult result = launcher_.launchBinFile(pkg.binFile);
-                    if (!result.ok) ui::showMessage("Load app failed", result.message, TFT_RED);
+                    (void)result;
                     return;
                 }
                 delay(power::uiLoopDelayMs());
@@ -372,12 +373,13 @@ void LauncherMenu::showFileExplorer(const char* path) {
             m5os::keyboardDrainEnter();
             while (true) {
                 m5os::update();
-                if (m5os::keyboardBackJustPressed()) break;
-                if (m5os::keyboardEnterJustPressed()) {
+                Buttons keys = ui::readButtonsExtended();
+                if (keys.back || m5os::keyboardBackJustPressed()) break;
+                if (keys.ok || m5os::keyboardEnterJustPressed()) {
                     ui::showFlashProgress(0, "Load app", chosen + "\nStarting...");
                     m5os::update();
                     LaunchResult result = launcher_.launchBinPath(fullPath);
-                    if (!result.ok) ui::showMessage("Load app failed", result.message, TFT_RED);
+                    (void)result;
                     return;
                 }
                 delay(power::uiLoopDelayMs());

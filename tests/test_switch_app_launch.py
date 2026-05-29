@@ -36,7 +36,7 @@ def test_switcher_drains_esc_before_loop():
     assert switcher.index("keyboardDrainBack()") < switcher.index("while (true)")
 
 
-def test_switcher_confirm_uses_keysstate_enter():
+def test_switcher_confirm_accepts_keyboard_enter():
     text = LAUNCHER_CPP.read_text(encoding="utf-8")
     switcher = text[text.index("void LauncherMenu::showAppSwitcher") : text.index(
         "void LauncherMenu::showInstalledApps"
@@ -47,7 +47,22 @@ def test_switcher_confirm_uses_keysstate_enter():
         )
     ]
     assert "keyboardEnterJustPressed()" in confirm
+    assert "readButtonsExtended()" in confirm
     assert "readButtons()" not in confirm
+
+
+def test_explorer_confirm_accepts_keyboard_enter():
+    text = LAUNCHER_CPP.read_text(encoding="utf-8")
+    explorer = text[text.index("void LauncherMenu::showFileExplorer") : text.index(
+        "void LauncherMenu::showThemeMenu"
+    )]
+    confirm = explorer[
+        explorer.index("keyboardDrainEnter()") : explorer.index(
+            "showFileExplorer(dirPath.c_str());", explorer.index("keyboardDrainEnter()")
+        )
+    ]
+    assert "keyboardEnterJustPressed()" in confirm
+    assert "readButtonsExtended()" in confirm
 
 
 def test_keyboard_enter_helpers():
@@ -112,6 +127,27 @@ def test_launch_shows_progress_before_hash():
     assert helper.index("showFlashProgress") < helper.index("computeFileSha256HexWithProgress")
     assert "Hashing" in helper
     assert "copySdToOta" in text
+
+
+def test_launch_surfaces_errors_on_screen():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
+        "AppLauncher::AppLauncher"
+    )]
+    assert "surfaceLaunchFailure" in helper
+    assert helper.count("surfaceLaunchFailure") >= 5
+    assert "Cannot open bin" in helper
+
+
+def test_launch_phases_use_load_app_label():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
+        "AppLauncher::AppLauncher"
+    )]
+    assert '"Load app"' in text[text.index("void paintLoadAppPhase") : text.index("bool canSkipFlashToCachedOta")]
+    assert "Copy to run slot" in text
+    assert "Rebooting" in helper
+    assert "Already loaded" in helper
 
 
 def test_launch_begins_session_before_copy():
