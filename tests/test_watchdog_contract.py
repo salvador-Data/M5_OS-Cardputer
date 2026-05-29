@@ -40,11 +40,15 @@ def test_watchdog_uses_twdt_and_shutdown_restore():
 def test_launch_pending_skips_shutdown_restore_on_load_app():
     flash = FLASH_CPP.read_text(encoding="utf-8")
     launch = flash[flash.index("bool launchStagedAppSession") : flash.index("void tryEarlyRecoveryBoot")]
-    assert "beginLaunchSession()" in launch
-    assert "restoreBootToHome()" in launch
-    assert "esp_restart()" in launch
+    assert "rebootIntoStagedApp" in launch
+    assert "esp_restart()" in flash[flash.index("bool rebootIntoStagedApp") : flash.index("}  // namespace", flash.index("bool rebootIntoStagedApp"))]
+    assert "restoreBootToHome()" not in launch
+    reboot_fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("}  // namespace", flash.index("bool rebootIntoStagedApp"))]
+    assert "beginLaunchSession()" in reboot_fn
+    assert "esp_ota_set_boot_partition(target)" in reboot_fn
+    assert "restoreBootToHome()" not in reboot_fn
     handoff = flash[flash.index("bool tryLaunchPendingHandoff") : flash.index("bool launchStagedAppSession")]
-    assert "esp_ota_set_boot_partition(target)" in handoff
+    assert "rebootIntoStagedApp" in handoff
 
 
 def test_crash_reset_restores_home():
@@ -65,5 +69,6 @@ def test_watchdog_symbols_declared():
     assert "beginWatchdog" in header
     assert "feedWatchdog" in header
     for sym in ("applyCrashResetHomeRestore", "setLaunchPending", "isLaunchPending", "clearLaunchPending",
-                "beginLaunchSession", "tryLaunchPendingHandoff", "resolveLaunchBootPartition"):
+                "beginLaunchSession", "tryLaunchPendingHandoff", "resolveLaunchBootPartition",
+                "consumeLaunchFailDetail"):
         assert sym in FLASH_H.read_text(encoding="utf-8")

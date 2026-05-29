@@ -1,9 +1,8 @@
 #pragma once
 
-
-
 #include "m5os_config.h"
 
+#include <Arduino.h>
 #include <cstddef>
 #include <esp_partition.h>
 
@@ -72,7 +71,10 @@ bool tryLaunchPendingHandoff();
 /** True once if the last boot handoff failed; clears the flag. */
 bool consumeLaunchHandoffFailure();
 
-/** Phase-1: restore home otadata, keep launch pending, SW restart into M5 OS handoff. */
+/** Last launch/handoff failure tag (e.g. no_target, set_boot); empty if none. Cleared on read. */
+String consumeLaunchFailDetail();
+
+/** Save home, point otadata at staged app, single SW restart into app. */
 bool launchStagedAppSession();
 
 const esp_partition_t* stagingOtaPartition();

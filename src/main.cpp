@@ -42,7 +42,13 @@ void setup() {
     m5os::ui::bootIntroBegin();
 
     if (m5os::consumeLaunchHandoffFailure()) {
-        m5os::ui::showMessage("Load app failed", "Run slot invalid\nRe-copy from SD", TFT_RED, 2500);
+        String detail = m5os::consumeLaunchFailDetail();
+        String msg = "Run slot invalid\nRe-copy from SD";
+        if (detail == "no_target") msg = "No valid app\nin run slot (app1)";
+        else if (detail == "set_boot") msg = "Boot partition\nswitch failed";
+        else if (detail == "already_running") msg = "Already on run slot\nRe-copy from SD";
+        else if (detail.length()) msg = detail;
+        m5os::ui::showMessage("Load app failed", msg, TFT_RED, 2500);
     }
 
     if (!sdOk) {

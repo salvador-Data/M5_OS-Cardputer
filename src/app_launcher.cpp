@@ -464,6 +464,7 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
             cancelLaunchSession();
             result.ok = false;
             result.message = "Run slot empty\nor invalid image";
+            log::info("launch_resolve_fail", "cached");
             return result;
         }
 
@@ -471,9 +472,8 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
         cancelLaunchSession();
         result.ok = false;
-
-        result.message = "Reboot failed — try again";
-
+        result.message = "Reboot failed\nCheck serial log";
+        log::info("launch_reboot_fail", "cached");
         return result;
 
     }
@@ -528,6 +528,7 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
         cancelLaunchSession();
         result.ok = false;
         result.message = "Copy OK but run slot\ninvalid — re-copy app";
+        log::info("launch_resolve_fail", "copy");
         return result;
     }
 
@@ -535,9 +536,8 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     cancelLaunchSession();
     result.ok = false;
-
-    result.message = "Reboot failed — try again";
-
+    result.message = "Copy OK, reboot failed\nCheck serial log";
+    log::info("launch_reboot_fail", "copy");
     return result;
 
 }

@@ -29,6 +29,25 @@ def test_spiffs_apps_use_sd_only_path():
     assert "Needs SPIFFS" in text
 
 
+def test_single_reboot_launch_sets_boot_partition():
+    flash = FLASH_CPP.read_text(encoding="utf-8")
+    assert "partitionIsLaunchable" in flash
+    assert "esp_ota_get_state_partition" in flash
+    fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("}  // namespace", flash.index("bool rebootIntoStagedApp"))]
+    assert "restoreBootToHome()" not in fn
+    assert "esp_ota_set_boot_partition(target)" in fn
+    assert "m5os_launch_reboot" in fn
+    launch = flash[flash.index("bool launchStagedAppSession") : flash.index("void tryEarlyRecoveryBoot")]
+    assert "restoreBootToHome()" not in launch
+    assert "rebootIntoStagedApp" in launch
+
+
+def test_launch_fail_detail_wired_in_main():
+    main = MAIN_CPP.read_text(encoding="utf-8")
+    assert "consumeLaunchFailDetail()" in main
+    assert "no_target" in main
+
+
 def test_recovery_boot_wired_in_main():
     text = MAIN_CPP.read_text(encoding="utf-8")
     assert "tryEarlyRecoveryBoot()" in text
@@ -59,6 +78,7 @@ def test_recovery_helpers_declared():
         "beginLaunchSession",
         "resolveLaunchBootPartition",
         "stagingOtaPartition",
+        "consumeLaunchFailDetail",
     ):
         assert sym in header
         assert sym in source
