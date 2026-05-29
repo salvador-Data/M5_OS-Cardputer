@@ -208,7 +208,14 @@ void LauncherMenu::showFlashBurnerCatalog() {
         return;
     }
     if (!wifiIsConnected()) {
-        ui::showMessage("M5Burner load", "WiFi required", TFT_RED);
+        ui::showMessage("M5Burner load", "WiFi required\nUse WiFi setup first", TFT_RED);
+        return;
+    }
+
+    ui::showFlashProgress(0, "M5Burner catalog", "Fetching LauncherHub...");
+    m5os::update();
+    if (!catalog_.refreshFromBurnerHub(1)) {
+        ui::showMessage("M5Burner load", "LauncherHub failed\nCheck WiFi signal", TFT_RED);
         return;
     }
 
@@ -217,7 +224,7 @@ void LauncherMenu::showFlashBurnerCatalog() {
         if (pkg.fid.length()) burnerEntries.push_back(pkg);
     }
     if (burnerEntries.empty()) {
-        ui::showMessage("M5Burner load", "Refresh manifest first\n(no LauncherHub entries)", TFT_YELLOW);
+        ui::showMessage("M5Burner load", "No Cardputer apps\non LauncherHub", TFT_YELLOW);
         return;
     }
 
@@ -254,15 +261,19 @@ void LauncherMenu::showFlashBurnerCatalog() {
     m5os::lcd().setCursor(4, 64);
     m5os::lcd().print("Enter save to SD");
     m5os::lcd().setCursor(4, 78);
-    m5os::lcd().print("No auto-boot (SPIFFS safe)");
+    m5os::lcd().print("No auto-boot — Load app runs");
     m5os::lcd().setCursor(4, 92);
-    m5os::lcd().print("` cancel");
+    m5os::lcd().print("ESC/` cancel");
 
+    m5os::keyboardDrainBack();
+    m5os::keyboardDrainEnter();
     while (true) {
         m5os::update();
-        Buttons keys = m5os::readButtons();
-        if (keys.back) return;
-        if (keys.ok) {
+        Buttons keys = ui::readButtonsExtended();
+        if (keys.back || m5os::keyboardBackJustPressed()) return;
+        if (keys.ok || m5os::keyboardEnterJustPressed()) {
+            ui::showFlashProgress(0, "M5Burner load", pkg.name + "\nResolving...");
+            m5os::update();
             LaunchResult result = launcher_.flashBurnerPackage(pkg, version);
             if (result.ok) {
                 ui::showMessage("M5Burner", result.message, TFT_GREEN, 2600);

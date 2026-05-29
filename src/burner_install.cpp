@@ -42,6 +42,14 @@ String formatHttpStageError(const char* stage, int code) {
     return msg;
 }
 
+void setPlanError(BurnerPlanError* errOut, const char* stage, int httpCode, const char* detail) {
+    if (!errOut) return;
+    errOut->stage = stage;
+    errOut->httpCode = httpCode;
+    errOut->message = formatHttpStageError(stage, httpCode);
+    if (detail && detail[0] != '\0') errOut->message += "\n" + String(detail);
+}
+
 struct HttpGetResult {
     int code = -1;
     bool ok = false;
@@ -499,6 +507,11 @@ bool fetchInstallManifest(const String& fid, const String& version, BurnerInstal
 
 }  // namespace
 
+String formatBurnerStageError(const char* stage, int httpCode, const char* detail) {
+    return formatHttpStageError(stage, httpCode) +
+           ((detail && detail[0] != '\0') ? String("\n") + detail : String(""));
+}
+
 bool planRequiresSdOnly(const BurnerInstallPlan& plan) {
     if (plan.requiresFlashAssets) return true;
     if (!plan.dataSlices.empty()) return true;
@@ -506,12 +519,21 @@ bool planRequiresSdOnly(const BurnerInstallPlan& plan) {
     return false;
 }
 
-bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out) {
+bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out, int* httpCodeOut) {
     out.clear();
     const String safeFid = security::normalizeBurnerFid(fid);
     if (!safeFid.length() || WiFi.status() != WL_CONNECTED) return false;
 
-    const String payload = httpGetPayload(String(kLauncherHubCatalogBase) + "?fid=" + safeFid);
+    HTTPClient http;
+    const HttpGetResult httpResult =
+        httpGetWithRetry(http, String(kLauncherHubCatalogBase) + "?fid=" + safeFid, kCatalogHttpTimeoutMs);
+    if (httpCodeOut) *httpCodeOut = httpResult.code;
+    if (!httpResult.ok) {
+        http.end();
+        return false;
+    }
+    const String payload = http.getString();
+    http.end();
     if (!payload.length()) return false;
 
     JsonDocument doc;
@@ -526,13 +548,25 @@ bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out) {
     return !out.empty();
 }
 
-bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPlan& plan) {
+bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPlan& plan,
+                      BurnerPlanError* errOut) {
     plan = BurnerInstallPlan{};
     plan.fid = security::normalizeBurnerFid(fid);
-    if (!plan.fid.length() || WiFi.status() != WL_CONNECTED) return false;
+    if (!plan.fid.length()) {
+        setPlanError(errOut, "Plan", 0, "Invalid firmware id");
+        return false;
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+        setPlanError(errOut, "WiFi", 0, "WiFi required");
+        return false;
+    }
 
+    int versionHttpCode = 0;
     std::vector<BurnerVersionInfo> versions;
-    if (!fetchVersionList(plan.fid, versions)) return false;
+    if (!fetchVersionList(plan.fid, versions, &versionHttpCode)) {
+        setPlanError(errOut, "Catalog", versionHttpCode, "Version list failed");
+        return false;
+    }
 
     String targetVersion = version;
     const BurnerVersionInfo* picked = nullptr;
@@ -550,30 +584,54 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
         // Manifest is authoritative for app slice + SPIFFS/FAT metadata.
     } else {
         applyVersionInfo(*picked, plan);
-        if (!fillPlanDownloadUrl(plan)) return false;
+        if (!fillPlanDownloadUrl(plan)) {
+            setPlanError(errOut, "Plan", 0, "Download URL failed");
+            return false;
+        }
     }
 
     const size_t otaLimit = maxOtaAppBytes();
 
     if (plan.appSize == 0) {
         size_t remoteSize = 0;
-        if (!probeRemoteSize(plan.downloadUrl, remoteSize)) return false;
+        int probeHttpCode = 0;
+        if (!probeRemoteSize(plan.downloadUrl, remoteSize, &probeHttpCode)) {
+            setPlanError(errOut, "Download", probeHttpCode, "Size probe failed");
+            return false;
+        }
 
         if (plan.appOffset > 0) {
-            if (remoteSize <= plan.appOffset) return false;
+            if (remoteSize <= plan.appOffset) {
+                setPlanError(errOut, "Plan", 0, "Image smaller than offset");
+                return false;
+            }
             const size_t slice = remoteSize - plan.appOffset;
-            if (slice > otaLimit) return false;
+            if (slice > otaLimit) {
+                plan.appSize = static_cast<uint32_t>(slice);
+                setPlanError(errOut, "Plan", 0, "App too large for OTA slot");
+                return false;
+            }
             plan.appSize = static_cast<uint32_t>(slice);
             plan.noBootloader = false;
         } else if (plan.noBootloader) {
-            if (remoteSize > otaLimit) return false;
+            if (remoteSize > otaLimit) {
+                plan.appSize = static_cast<uint32_t>(remoteSize);
+                setPlanError(errOut, "Plan", 0, "App too large for OTA slot");
+                return false;
+            }
             plan.appSize = static_cast<uint32_t>(remoteSize);
         } else {
+            setPlanError(errOut, "Plan", 0, "Missing app size");
             return false;
         }
     }
 
-    return finalizePlanSize(plan);
+    if (!finalizePlanSize(plan)) {
+        setPlanError(errOut, "Plan", 0,
+                     plan.appSize > otaLimit ? "App too large for OTA slot" : "Invalid install plan");
+        return false;
+    }
+    return true;
 }
 
 BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdPath) {
@@ -655,7 +713,6 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
                          : "Staged in OTA slot. Launch from Apps menu to run.";
     log::info("burner_flash_ok", plan.version);
     ui::showFlashProgress(100, "M5Burner load", result.message);
-    ui::showMessage("M5Burner", result.message, TFT_GREEN, 2200);
     return result;
 }
 
@@ -758,13 +815,12 @@ BurnerDownloadResult downloadFidToSd(const String& fid, const String& version,
                                        const String& sdPath) {
     BurnerDownloadResult result;
     BurnerInstallPlan plan;
-    if (!buildInstallPlan(fid, version, plan)) {
-        result.stage = "Plan";
-        if (plan.appSize > maxOtaAppBytes()) {
-            result.message = "App too large for OTA slot";
-        } else {
-            result.message = "Install info failed";
-        }
+    BurnerPlanError planErr;
+    if (!buildInstallPlan(fid, version, plan, &planErr)) {
+        result.stage = planErr.stage.length() ? planErr.stage : String("Plan");
+        result.httpCode = planErr.httpCode;
+        result.message =
+            planErr.message.length() ? planErr.message : String("Install info failed");
         return result;
     }
     return downloadPlanToSd(plan, sdPath);

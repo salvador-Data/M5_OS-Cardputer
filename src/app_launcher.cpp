@@ -686,33 +686,19 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
 
     }
 
-    if (!burner::enrichPackageFromBurner(pkg)) {
-
-        result.message = "Version info failed";
-
-        log::info("burner_enrich_fail", pkg.name);
-
-        return result;
-
-    }
-
 
 
     burner::BurnerInstallPlan plan;
 
-    const String pickVersion = version.length() ? version : pkg.version;
+    burner::BurnerPlanError planErr;
 
-    if (!burner::buildInstallPlan(pkg.fid, pickVersion == "burner" ? "" : pickVersion, plan)) {
+    String pickVersion = version.length() ? version : pkg.version;
 
-        if (plan.appSize > maxOtaAppBytes()) {
+    if (pickVersion == "burner") pickVersion = "";
 
-            result.message = "App too large for OTA slot";
+    if (!burner::buildInstallPlan(pkg.fid, pickVersion, plan, &planErr)) {
 
-        } else {
-
-            result.message = "Install info failed";
-
-        }
+        result.message = planErr.message.length() ? planErr.message : String("Install info failed");
 
         log::info("burner_plan_fail", pkg.name);
 
@@ -724,15 +710,35 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
 
     const String slug = pkg.slug.length() ? pkg.slug : vfs::slugFromName(pkg.name);
 
-    const String safeBin = security::sanitizeBinFilename(pkg.binFile);
+    if (!pkg.binFile.length()) {
 
-    String sdPath;
-
-    if (safeBin.length() && vfs::ensureAppDirs(slug)) {
-
-        sdPath = catalog_.binPathForPackage(pkg);
+        pkg.binFile = security::sanitizeBinFilename(FirmwareCatalog::slugToBinFile(pkg.name));
 
     }
+
+    const String safeBin = security::sanitizeBinFilename(pkg.binFile);
+
+    if (!safeBin.length()) {
+
+        result.message = "Invalid bin filename";
+
+        return result;
+
+    }
+
+    pkg.binFile = safeBin;
+
+    if (!pkg.slug.length()) pkg.slug = slug;
+
+    if (!vfs::ensureAppDirs(slug)) {
+
+        result.message = "Cannot create /apps dir";
+
+        return result;
+
+    }
+
+    const String sdPath = catalog_.binPathForPackage(pkg);
 
 
 
@@ -749,6 +755,12 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
                                       plan.requiresFlashAssets || !plan.dataSlices.empty());
 
         catalog_.scanInstalled();
+
+        if (SD.exists(sdPath.c_str())) {
+
+            result.message = "Saved to\n" + sdPath + "\nLoad app to run";
+
+        }
 
     }
 

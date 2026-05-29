@@ -52,11 +52,22 @@ struct BurnerDownloadResult {
     bool requiresFlashAssets = false;
 };
 
+/** Optional detail when buildInstallPlan fails (stage + HTTP code). */
+struct BurnerPlanError {
+    String stage;
+    String message;
+    int httpCode = 0;
+};
+
+/** Format user-facing error with stage and optional HTTP code. */
+String formatBurnerStageError(const char* stage, int httpCode, const char* detail = nullptr);
+
 /** List published versions for a LauncherHub firmware id. */
-bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out);
+bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out, int* httpCodeOut = nullptr);
 
 /** Resolve install plan from LauncherHub (manifest first, version list fallback). */
-bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPlan& plan);
+bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPlan& plan,
+                      BurnerPlanError* errOut = nullptr);
 
 /**
  * Stream app bytes from LauncherHub/M5Burner CDN.

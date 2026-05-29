@@ -13,26 +13,36 @@ namespace m5os::burner {
 
 namespace {
 
+constexpr uint8_t kHttpMaxAttempts = 3;
+constexpr uint32_t kCatalogHttpTimeoutMs = 20000;
+
 String httpGetPayload(const String& url) {
     if (!security::isAllowedHttpsUrl(url)) {
         log::info("burner_url_rejected");
         return "";
     }
     HTTPClient http;
-    http.begin(url);
-    http.setTimeout(20000);
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.addHeader("Accept-Encoding", "identity");
-    applyBurnerDownloadHeaders(http, url);
-    const int code = http.GET();
-    if (code != HTTP_CODE_OK) {
+    for (uint8_t attempt = 0; attempt < kHttpMaxAttempts; ++attempt) {
+        if (WiFi.status() != WL_CONNECTED) {
+            delay(400);
+            continue;
+        }
+        http.begin(url);
+        http.setTimeout(kCatalogHttpTimeoutMs);
+        http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+        http.addHeader("Accept-Encoding", "identity");
+        applyBurnerDownloadHeaders(http, url);
+        const int code = http.GET();
+        if (code == HTTP_CODE_OK) {
+            const String payload = http.getString();
+            http.end();
+            return payload;
+        }
         http.end();
         log::info("burner_http_fail", String(code));
-        return "";
+        delay(400 * (attempt + 1));
     }
-    const String payload = http.getString();
-    http.end();
-    return payload;
+    return "";
 }
 
 }  // namespace
