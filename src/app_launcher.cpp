@@ -104,7 +104,7 @@ LaunchResult AppLauncher::launchByPackageName(const String& packageName) {
         return launchBinFile(pkg->binFile);
     }
     LaunchResult result;
-    result.message = "Not installed: " + packageName;
+    result.message = "App not on SD:\n" + packageName + "\nDownload or copy .bin";
     return result;
 }
 

@@ -17,7 +17,7 @@ namespace m5os {
 
 namespace {
 
-void showSdRequired(const String& action) {
+void showSdRequired(const String& action = "") {
     String body = "Insert SD to save";
     if (action.length()) body = action + "\n" + body;
     const String sdDetail = vfs::lastMountError();
@@ -228,7 +228,7 @@ void LauncherMenu::showSaveExportMenu() {
     const int pick = ui::selectFromList(labels, "Save / export");
     if (pick < 0) return;
     if (!settings::ensureSdMounted()) {
-        showSdRequired();
+        showSdRequired("Save / export");
         return;
     }
     String outPath;
