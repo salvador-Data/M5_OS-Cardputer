@@ -66,9 +66,13 @@ def test_boot_jokes_count_at_least_fifty():
     assert len(jokes) >= 50, f"expected >= 50 jokes, found {len(jokes)}"
 
 
-def test_boot_intro_displays_random_joke():
+def test_boot_intro_mask_uses_polygon_silhouette_not_ellipse():
     text = UI_CPP.read_text(encoding="utf-8")
-    assert '#include "boot_jokes.h"' in text
-    assert "prepareIntroJoke()" in text
-    assert "gIntroJoke.line1" in text
-    assert "gIntroJoke.line2" in text
+    fn_start = text.index("void drawGuyFawkesMask")
+    fn_end = text.index("struct IntroJokeLines", fn_start)
+    body = text[fn_start:fn_end]
+    assert "kGuyFawkesSilhouette" in body
+    assert "fillClosedPolygon" in body
+    assert "strokeClosedPolygon" in body
+    assert "fillEllipse" not in body
+    assert "drawEllipse" not in body

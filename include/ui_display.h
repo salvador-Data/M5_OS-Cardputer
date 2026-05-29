@@ -21,6 +21,8 @@ void setThemePreset(int preset);
 int getThemePreset();
 
 void drawHeader(const char* title);
+/** Progress bar for M5Burner flash / OTA / SD load (bytes + percent). */
+void showFlashProgress(int percent, const char* label, const String& detail = "");
 void showMessage(const char* title, const String& body, uint16_t color = TFT_WHITE,
                  unsigned long holdMs = 1600);
 void bootIntroBegin();

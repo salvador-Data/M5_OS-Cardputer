@@ -56,14 +56,20 @@ bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out);
 bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPlan& plan);
 
 /**
- * Stream app bytes from LauncherHub/M5Burner CDN into ESP32 OTA slot.
- * When sdPath is set, also writes the same app slice to SD (multi-app model).
- * SPIFFS/FAT slices (copy_size > 0) are saved alongside the app on SD when sdPath is set.
+ * Stream app bytes from LauncherHub/M5Burner CDN.
+ * SPIFFS/composite images: SD download only (no OTA reboot).
+ * Simple app-only images: stage OTA inactive slot + SD copy; M5 OS stays bootable.
  */
 BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdPath = "");
 
 /** Download app slice (+ optional SPIFFS/FAT extras) from a resolved install plan. */
 BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const String& sdPath);
+
+/**
+ * True when composite M5Burner image needs SPIFFS/LittleFS or bootloader slice —
+ * must not OTA-reboot on M5 OS (no SPIFFS partition in our table).
+ */
+bool planRequiresSdOnly(const BurnerInstallPlan& plan);
 
 /** Resolve install plan and download app slice to sdPath (LauncherHub catalog download). */
 BurnerDownloadResult downloadFidToSd(const String& fid, const String& version, const String& sdPath);

@@ -3,6 +3,7 @@
 #include "burner_install.h"
 #include "burner_bridge.h"
 #include "m5os_config.h"
+#include "M5OSDevice.h"
 #include "m5os_gc.h"
 #include "m5os_settings.h"
 #include "m5os_vfs.h"
@@ -12,6 +13,7 @@
 #include "wifi_manager.h"
 
 #include <ArduinoJson.h>
+#include <M5Cardputer.h>
 #include <SD.h>
 
 namespace m5os {
@@ -57,47 +59,110 @@ void LauncherMenu::exportCatalogSerial() {
     log::info("catalog_exported");
 }
 
-void LauncherMenu::showInstalledApps() {
+void LauncherMenu::showAppSwitcher() {
     if (!settings::ensureSdMounted()) {
-        showSdRequired("Launch needs SD");
+        showSdRequired("Switch app needs SD");
         return;
     }
     catalog_.scanInstalled();
-    std::vector<String> labels;
-    for (const auto& pkg : catalog_.installed()) {
-        String line = pkg.name;
-        if (pkg.version.length()) line += " v" + pkg.version;
-        labels.push_back(line);
+    const auto& installed = catalog_.installed();
+    if (installed.empty()) {
+        ui::showMessage("Switch app", "No apps on SD\nLoad from catalog", TFT_YELLOW);
+        return;
     }
-    const int pick = ui::selectFromList(labels, "Launch app");
-    if (pick < 0) return;
-    const auto& pkg = catalog_.installed()[pick];
-    ui::drawHeader("Launch app");
-    m5os::lcd().setCursor(4, 28);
-    m5os::lcd().println(pkg.name);
-    m5os::lcd().setCursor(4, 44);
-    m5os::lcd().println(pkg.description.length() ? pkg.description : "Field firmware");
-    m5os::lcd().setCursor(4, 64);
-    m5os::lcd().print("Enter flash app slot");
-    m5os::lcd().setCursor(4, 78);
-    m5os::lcd().print("` cancel  (M5 OS on SD)");
+
+    int index = 0;
+    int scroll = 0;
+    int lastIndex = -1;
+    int lastScroll = -1;
+    constexpr int kVisible = 6;
+
+    auto redrawSwitcher = [&]() {
+        ui::drawHeader("Switch app");
+        if (index < scroll) scroll = index;
+        if (index >= scroll + kVisible) scroll = index - kVisible + 1;
+
+        for (int row = 0; row < kVisible; ++row) {
+            const int i = scroll + row;
+            const int y = 24 + row * 14;
+            m5os::lcd().fillRect(4, y - 2, m5os::lcd().width() - 8, 14, TFT_BLACK);
+            if (i >= static_cast<int>(installed.size())) continue;
+            m5os::lcd().setCursor(8, y);
+            String line = installed[i].name;
+            if (installed[i].version.length()) line += " v" + installed[i].version;
+            if (i == index) {
+                m5os::lcd().setTextColor(ui::theme().primary, ui::theme().secondary);
+                m5os::lcd().printf("> %s", line.c_str());
+            } else {
+                m5os::lcd().setTextColor(ui::theme().secondary, TFT_BLACK);
+                m5os::lcd().printf("  %s", line.c_str());
+            }
+        }
+
+        m5os::lcd().setTextColor(TFT_WHITE, TFT_BLACK);
+        m5os::lcd().setCursor(4, 108);
+        m5os::lcd().print("Enter launch  Tab next");
+        m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
+        m5os::lcd().setCursor(4, 118);
+        m5os::lcd().print("ESC/` menu  hold ` @ boot=M5 OS");
+        lastIndex = index;
+        lastScroll = scroll;
+    };
+
+    redrawSwitcher();
 
     while (true) {
+        if (index != lastIndex || scroll != lastScroll) redrawSwitcher();
+
         m5os::update();
-        Buttons keys = m5os::readButtons();
+        Buttons keys = ui::readButtonsExtended();
+        if (keys.help) {
+            ui::drawHelpOverlay();
+            continue;
+        }
+        if (keys.up) index = (index > 0) ? index - 1 : static_cast<int>(installed.size()) - 1;
+        if (keys.down) index = (index + 1) % static_cast<int>(installed.size());
+        if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
+            if (M5Cardputer.Keyboard.keysState().tab) {
+                index = (index + 1) % static_cast<int>(installed.size());
+            }
+        }
         if (keys.back) return;
         if (keys.ok) {
-            LaunchResult result = launcher_.launchBinFile(pkg.binFile);
-            if (!result.ok) ui::showMessage("Launch failed", result.message, TFT_RED);
-            return;
+            const auto& pkg = installed[index];
+            ui::drawHeader("Launch app");
+            m5os::lcd().setCursor(4, 28);
+            m5os::lcd().println(pkg.name);
+            m5os::lcd().setCursor(4, 44);
+            m5os::lcd().println(pkg.description.length() ? pkg.description : "Field firmware");
+            m5os::lcd().setCursor(4, 64);
+            m5os::lcd().print("Enter flash app slot");
+            m5os::lcd().setCursor(4, 78);
+            m5os::lcd().print("ESC/` cancel — apps stay on SD");
+
+            while (true) {
+                m5os::update();
+                Buttons confirm = m5os::readButtons();
+                if (confirm.back) break;
+                if (confirm.ok) {
+                    LaunchResult result = launcher_.launchBinFile(pkg.binFile);
+                    if (!result.ok) ui::showMessage("Launch failed", result.message, TFT_RED);
+                    return;
+                }
+                delay(power::uiLoopDelayMs());
+            }
+            redrawSwitcher();
+            continue;
         }
         delay(power::uiLoopDelayMs());
     }
 }
 
-void LauncherMenu::showDownloadCatalog() {
+void LauncherMenu::showInstalledApps() { showAppSwitcher(); }
+
+void LauncherMenu::showLoadCatalog() {
     if (!settings::ensureSdMounted()) {
-        showSdRequired("Download needs SD");
+        showSdRequired("Load needs SD");
         return;
     }
     std::vector<String> labels;
@@ -106,30 +171,30 @@ void LauncherMenu::showDownloadCatalog() {
         if (pkg.installed) line += " [SD]";
         labels.push_back(line);
     }
-    const int pick = ui::selectFromList(labels, "Download");
+    const int pick = ui::selectFromList(labels, "Load from catalog");
     if (pick < 0) return;
     const FirmwarePackage& pkg = catalog_.available()[pick];
     if (pkg.installed) {
-        ui::showMessage("Download", pkg.name + "\nAlready on SD", TFT_YELLOW);
+        ui::showMessage("Load", pkg.name + "\nAlready on SD", TFT_YELLOW);
         return;
     }
     if (!wifiIsConnected()) {
-        ui::showMessage("Download", "WiFi required", TFT_RED);
+        ui::showMessage("Load", "WiFi required", TFT_RED);
         return;
     }
-    ui::drawHeader("Downloading");
-    m5os::lcd().setCursor(4, 30);
-    m5os::lcd().println(pkg.name);
+    ui::showFlashProgress(0, "Loading", pkg.name);
+    m5os::update();
     if (catalog_.downloadPackage(pkg)) {
         const String path = catalog_.binPathForPackage(pkg);
         String body = pkg.name;
         if (path.length()) body += "\nSaved to\n" + path;
-        ui::showMessage("Installed", body, TFT_GREEN, 2200);
+        ui::showFlashProgress(100, "Loading", body);
+        ui::showMessage("Loaded", body, TFT_GREEN, 2200);
     } else {
         String body = catalog_.lastDownloadError().length() ? catalog_.lastDownloadError()
-                                                            : String("Download failed");
+                                                            : String("Load failed");
         if (!vfs::isMounted()) body = "Insert SD to save";
-        ui::showMessage("Error", body, TFT_RED);
+        ui::showMessage("Load failed", body, TFT_RED);
     }
 }
 
@@ -183,9 +248,11 @@ void LauncherMenu::showFlashBurnerCatalog() {
     m5os::lcd().setCursor(4, 44);
     m5os::lcd().println(version.length() ? version : "latest");
     m5os::lcd().setCursor(4, 64);
-    m5os::lcd().print("Enter flash app slot");
+    m5os::lcd().print("Enter save to SD");
     m5os::lcd().setCursor(4, 78);
-    m5os::lcd().print("` cancel  (copy to SD too)");
+    m5os::lcd().print("No auto-boot (SPIFFS safe)");
+    m5os::lcd().setCursor(4, 92);
+    m5os::lcd().print("` cancel");
 
     while (true) {
         m5os::update();
@@ -193,7 +260,11 @@ void LauncherMenu::showFlashBurnerCatalog() {
         if (keys.back) return;
         if (keys.ok) {
             LaunchResult result = launcher_.flashBurnerPackage(pkg, version);
-            if (!result.ok) ui::showMessage("Flash failed", result.message, TFT_RED);
+            if (result.ok) {
+                ui::showMessage("M5Burner", result.message, TFT_GREEN, 2600);
+            } else {
+                ui::showMessage("Flash failed", result.message, TFT_RED);
+            }
             return;
         }
         delay(power::uiLoopDelayMs());
@@ -361,8 +432,8 @@ void LauncherMenu::showHelp() { ui::drawHelpOverlay(); }
 void LauncherMenu::runMainLoop() {
     static const char* items[] = {
         "WiFi setup",
-        "Launch installed app",
-        "Download from catalog",
+        "Switch app (ESC/`)",
+        "Load from catalog",
         "Flash from M5Burner catalog",
         "Refresh manifest",
         "Storage cleanup",
@@ -378,16 +449,19 @@ void LauncherMenu::runMainLoop() {
 
     while (true) {
         const int pick = ui::selectFromList(labels, "M5 OS Main");
-        if (pick < 0) return;
+        if (pick < 0) {
+            showAppSwitcher();
+            continue;
+        }
         switch (pick) {
             case 0:
                 showWifiSetup();
                 break;
             case 1:
-                showInstalledApps();
+                showAppSwitcher();
                 break;
             case 2:
-                showDownloadCatalog();
+                showLoadCatalog();
                 break;
             case 3:
                 showFlashBurnerCatalog();

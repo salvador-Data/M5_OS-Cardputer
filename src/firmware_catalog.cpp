@@ -340,7 +340,7 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkgIn) {
         const burner::BurnerDownloadResult burned =
             burner::downloadFidToSd(pkg.fid, version, path);
         if (!burned.ok) {
-            lastDownloadError_ = burned.message.length() ? burned.message : "Download failed";
+            lastDownloadError_ = burned.message.length() ? burned.message : "Load failed";
             if (burned.stage.length()) lastDownloadError_ = burned.stage + ": " + lastDownloadError_;
             log::info("burner_download_fail", pkg.name);
             return false;
@@ -415,9 +415,9 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkgIn) {
     if (!digest.length()) {
         SD.remove(path.c_str());
         if (WiFi.status() != WL_CONNECTED) {
-            lastDownloadError_ = "WiFi lost during download";
+            lastDownloadError_ = "WiFi lost during load";
         } else {
-            lastDownloadError_ = "Download incomplete";
+            lastDownloadError_ = "Load incomplete";
         }
         log::info("download_hash_fail", pkg.name);
         return false;

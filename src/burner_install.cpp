@@ -2,6 +2,7 @@
 
 #include "m5burner_hookup.h"
 #include "m5os_config.h"
+#include "M5OSDevice.h"
 #include "m5os_flash.h"
 #include "m5os_security.h"
 #include "serial_log.h"
@@ -210,8 +211,29 @@ struct RangeStreamResult {
     size_t written = 0;
 };
 
+void reportStreamProgress(size_t written, size_t total, const char* label,
+                          const char* detailLine, size_t* lastPainted) {
+    if (!label || total == 0) return;
+    const bool atStart = written == 0;
+    const bool atEnd = written >= total;
+    const bool interval = written > 0 && (written % 4096 == 0);
+    if (!atStart && !atEnd && !interval) return;
+    if (lastPainted && *lastPainted == written) return;
+    if (lastPainted) *lastPainted = written;
+
+    const int percent = static_cast<int>(min(100ULL, (written * 100ULL) / total));
+    String detail;
+    if (detailLine && detailLine[0] != '\0') detail = detailLine;
+    const String bytes =
+        String(static_cast<unsigned>(written)) + " / " + String(static_cast<unsigned>(total));
+    if (detail.length()) detail += "\n";
+    detail += bytes;
+    ui::showFlashProgress(percent, label, detail);
+    m5os::update();
+}
+
 RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t imageSize, File& out,
-                                    const char* progressLabel) {
+                                    const char* progressLabel, const char* detailLine = nullptr) {
     RangeStreamResult result;
     if (!security::isAllowedHttpsUrl(url)) return result;
     if (imageSize == 0) return result;
@@ -231,8 +253,10 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
 
     WiFiClient* stream = http.getStreamPtr();
     size_t written = 0;
+    size_t lastPainted = SIZE_MAX;
     uint8_t buffer[512];
     uint32_t idleMs = 0;
+    reportStreamProgress(0, imageSize, progressLabel, detailLine, &lastPainted);
     while (written < imageSize) {
         if (WiFi.status() != WL_CONNECTED) break;
         const size_t avail = stream->available();
@@ -253,12 +277,7 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
             return result;
         }
         written += static_cast<size_t>(read);
-        if (progressLabel && (written % 8192 == 0 || written == imageSize)) {
-            ui::drawHeader(progressLabel);
-            m5os::lcd().setCursor(4, 44);
-            m5os::lcd().printf("%u / %u", static_cast<unsigned>(written),
-                               static_cast<unsigned>(imageSize));
-        }
+        reportStreamProgress(written, imageSize, progressLabel, detailLine, &lastPainted);
     }
     http.end();
     result.written = written;
@@ -268,7 +287,8 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
 }
 
 bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut,
-                      int* httpCodeOut = nullptr) {
+                      int* httpCodeOut = nullptr, const char* progressLabel = "Flashing app",
+                      const char* detailLine = nullptr) {
     if (!security::isAllowedHttpsUrl(url)) return false;
     if (imageSize == 0 || imageSize > maxOtaAppBytes()) return false;
 
@@ -292,6 +312,8 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
 
     uint8_t buffer[512];
     uint32_t idleMs = 0;
+    size_t lastPainted = SIZE_MAX;
+    reportStreamProgress(0, imageSize, progressLabel, detailLine, &lastPainted);
     while (ctx.written < imageSize) {
         if (WiFi.status() != WL_CONNECTED) break;
         const size_t avail = stream->available();
@@ -311,12 +333,7 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
             http.end();
             return false;
         }
-        if (ctx.written % 8192 == 0 || ctx.written == imageSize) {
-            ui::drawHeader("Flashing app");
-            m5os::lcd().setCursor(4, 44);
-            m5os::lcd().printf("%u / %u", static_cast<unsigned>(ctx.written),
-                               static_cast<unsigned>(imageSize));
-        }
+        reportStreamProgress(ctx.written, imageSize, progressLabel, detailLine, &lastPainted);
     }
     http.end();
 
@@ -329,6 +346,7 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
         log::info("burner_end_fail", String(Update.errorString()));
         return false;
     }
+    restoreBootToHome();
     return true;
 }
 
@@ -371,6 +389,12 @@ bool fetchInstallManifest(const String& fid, const String& version, BurnerInstal
 }
 
 }  // namespace
+
+bool planRequiresSdOnly(const BurnerInstallPlan& plan) {
+    if (!plan.dataSlices.empty()) return true;
+    if (plan.appOffset > 0 && !plan.noBootloader) return true;
+    return false;
+}
 
 bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out) {
     out.clear();
@@ -454,6 +478,26 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
         return result;
     }
 
+    saveHomeAppPartition();
+
+    if (planRequiresSdOnly(plan)) {
+        if (!sdPath.length()) {
+            result.message = "Insert SD — SPIFFS apps save to SD only";
+            return result;
+        }
+        const BurnerDownloadResult saved = downloadPlanToSd(plan, sdPath);
+        result.ok = saved.ok;
+        if (saved.ok) {
+            result.savedExtraToSd = !plan.dataSlices.empty();
+            result.message =
+                "Saved to SD. Needs SPIFFS/LittleFS — use M5Burner USB full flash to run. "
+                "M5 OS stays active.";
+        } else {
+            result.message = saved.message.length() ? saved.message : "Load failed";
+        }
+        return result;
+    }
+
     File sdOut;
     if (sdPath.length()) {
         sdOut = SD.open(sdPath.c_str(), FILE_WRITE);
@@ -464,20 +508,17 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
         }
     }
 
-    ui::drawHeader("M5Burner flash");
-    m5os::lcd().setCursor(4, 28);
-    m5os::lcd().println(plan.version.length() ? plan.version : plan.file);
-    m5os::lcd().setCursor(4, 44);
-    m5os::lcd().printf("App %u bytes", static_cast<unsigned>(plan.appSize));
-    if (!plan.dataSlices.empty()) {
-        m5os::lcd().setCursor(4, 58);
-        m5os::lcd().print("Assets -> SD only");
-    }
+    const String flashDetail =
+        (plan.version.length() ? plan.version : plan.file) + "\nApp " + String(plan.appSize) +
+        " bytes";
+    ui::showFlashProgress(0, "M5Burner flash", flashDetail);
+    m5os::update();
 
     const uint32_t offset = plan.noBootloader ? 0 : plan.appOffset;
     int flashHttpCode = 0;
-    const bool ok = streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr,
-                                     &flashHttpCode);
+    const bool ok =
+        streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr,
+                         &flashHttpCode, "Flashing app", flashDetail.c_str());
     if (sdOut) sdOut.close();
 
     if (!ok) {
@@ -492,45 +533,13 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
         return result;
     }
 
-    for (const auto& slice : plan.dataSlices) {
-        if (slice.copySize == 0) continue;
-        const String extraPath = sdExtraPathFromApp(sdPath, slice);
-        if (!extraPath.length()) continue;
-
-        ui::drawHeader("Saving assets");
-        m5os::lcd().setCursor(4, 28);
-        m5os::lcd().println(slice.subtype + (slice.label.length() ? ":" + slice.label : ""));
-
-        File extraOut = SD.open(extraPath.c_str(), FILE_WRITE);
-        if (!extraOut) {
-            log::info("burner_extra_sd_fail", extraPath);
-            continue;
-        }
-        const RangeStreamResult saved =
-            streamRangeToFile(plan.downloadUrl, slice.sourceOffset, slice.copySize, extraOut,
-                              "Saving assets");
-        extraOut.close();
-        if (!saved.ok) {
-            SD.remove(extraPath.c_str());
-            log::info("burner_extra_incomplete", extraPath);
-            continue;
-        }
-        result.savedExtraToSd = true;
-        log::info("burner_extra_saved", extraPath);
-    }
-
     result.ok = true;
-    if (result.savedExtraToSd) {
-        result.message = "Rebooting (assets on SD)";
-    } else if (!plan.dataSlices.empty()) {
-        result.message = "Rebooting (app only)";
-    } else {
-        result.message = "Rebooting into app";
-    }
+    result.message = sdPath.length()
+                         ? "Staged on SD. Launch from Apps menu to run."
+                         : "Staged in OTA slot. Launch from Apps menu to run.";
     log::info("burner_flash_ok", plan.version);
-    ui::showMessage("M5Burner", result.message, TFT_GREEN, 1200);
-    delay(300);
-    esp_restart();
+    ui::showFlashProgress(100, "M5Burner flash", result.message);
+    ui::showMessage("M5Burner", result.message, TFT_GREEN, 2200);
     return result;
 }
 
@@ -565,15 +574,15 @@ BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const Strin
         return result;
     }
 
-    ui::drawHeader("Downloading");
-    m5os::lcd().setCursor(4, 28);
-    m5os::lcd().println(plan.version.length() ? plan.version : plan.file);
-    m5os::lcd().setCursor(4, 44);
-    m5os::lcd().printf("App %u bytes", static_cast<unsigned>(plan.appSize));
+    const String downloadDetail =
+        (plan.version.length() ? plan.version : plan.file) + "\nApp " + String(plan.appSize) +
+        " bytes";
+    ui::showFlashProgress(0, "Loading", downloadDetail);
+    m5os::update();
 
     const uint32_t offset = plan.noBootloader ? 0 : plan.appOffset;
-    const RangeStreamResult streamed =
-        streamRangeToFile(plan.downloadUrl, offset, plan.appSize, out, "Downloading");
+    const RangeStreamResult streamed = streamRangeToFile(
+        plan.downloadUrl, offset, plan.appSize, out, "Loading", downloadDetail.c_str());
     out.close();
     result.httpCode = streamed.httpCode;
     result.stage = "Download";
@@ -581,14 +590,14 @@ BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const Strin
     if (!streamed.ok) {
         SD.remove(sdPath.c_str());
         if (WiFi.status() != WL_CONNECTED) {
-            result.message = "WiFi lost during download";
+            result.message = "WiFi lost during load";
         } else if (streamed.httpCode > 0) {
-            result.message = formatHttpStageError("Download HTTP", streamed.httpCode);
+            result.message = formatHttpStageError("Load HTTP", streamed.httpCode);
         } else if (streamed.written > 0) {
-            result.message = "Download incomplete " + String(streamed.written) + "/" +
+            result.message = "Load incomplete " + String(streamed.written) + "/" +
                              String(plan.appSize);
         } else {
-            result.message = "Download failed";
+            result.message = "Load failed";
         }
         return result;
     }
@@ -598,18 +607,18 @@ BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const Strin
         const String extraPath = sdExtraPathFromApp(sdPath, slice);
         if (!extraPath.length()) continue;
 
-        ui::drawHeader("Saving assets");
-        m5os::lcd().setCursor(4, 28);
-        m5os::lcd().println(slice.subtype + (slice.label.length() ? ":" + slice.label : ""));
+        const String sliceDetail =
+            slice.subtype + (slice.label.length() ? ":" + slice.label : "") + "\n" +
+            String(slice.copySize) + " bytes";
 
         File extraOut = SD.open(extraPath.c_str(), FILE_WRITE);
         if (!extraOut) {
             log::info("burner_extra_sd_fail", extraPath);
             continue;
         }
-        const RangeStreamResult saved =
-            streamRangeToFile(plan.downloadUrl, slice.sourceOffset, slice.copySize, extraOut,
-                              "Saving assets");
+        const RangeStreamResult saved = streamRangeToFile(
+            plan.downloadUrl, slice.sourceOffset, slice.copySize, extraOut, "Saving assets",
+            sliceDetail.c_str());
         extraOut.close();
         if (!saved.ok) {
             SD.remove(extraPath.c_str());
@@ -622,6 +631,7 @@ BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const Strin
     result.ok = true;
     result.message = "Saved to SD";
     log::info("burner_download_ok", plan.version);
+    ui::showFlashProgress(100, "Loading", result.message);
     return result;
 }
 

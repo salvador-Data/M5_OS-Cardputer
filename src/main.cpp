@@ -17,6 +17,7 @@
 #include "wifi_manager.h"
 
 #include "M5OSDevice.h"
+#include "m5os_flash.h"
 
 static m5os::FirmwareCatalog gCatalog;
 static m5os::AppLauncher gLauncher(gCatalog);
@@ -25,6 +26,8 @@ static m5os::LauncherMenu gMenu(gCatalog, gLauncher);
 void setup() {
     m5os::log::begin();
     m5os::begin();
+    m5os::tryEarlyRecoveryBoot();
+    m5os::saveHomeAppPartition();
     m5os::power::begin();
 
     const bool sdOk = gCatalog.ensureStorage();

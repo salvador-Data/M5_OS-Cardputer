@@ -10,8 +10,10 @@ public:
     LauncherMenu(FirmwareCatalog& catalog, AppLauncher& launcher);
 
     void runMainLoop();
+    /** ESC/` app picker — pick installed SD app to launch (multi-app switch). */
+    void showAppSwitcher();
     void showInstalledApps();
-    void showDownloadCatalog();
+    void showLoadCatalog();
     void showFlashBurnerCatalog();
     void refreshCatalog();
     void showFileExplorer(const char* path);

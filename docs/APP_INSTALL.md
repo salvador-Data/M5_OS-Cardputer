@@ -7,7 +7,7 @@ This guide explains how to add **Remote Possibility**, **BLE Bot**, and other Ca
 | Tool | What it flashes | When to use |
 |------|-----------------|-------------|
 | **M5Burner** (desktop) | Full device image: bootloader + partition table + firmware at `0x10000` | **Once** to install M5 OS base; again only for **M5 OS updates** or **returning to launcher** after running an app |
-| **M5 OS** (this repo, on-device) | App `.bin` from SD → ESP32 OTA app slot (with user confirm) | Download or sideload apps to SD; launch when needed |
+| **M5 OS** (this repo, on-device) | App `.bin` from SD → ESP32 OTA app slot (with user confirm) | Load or sideload apps to SD; switch/launch when needed |
 | **M5 Launcher** ([bmorcelli/Launcher](https://github.com/bmorcelli/Launcher)) | Custom partition table; launcher stays in a fixed partition; apps to OTA slot | Alternative community launcher with M5Burner online catalog and WebUI |
 
 ### What M5Burner can do on Cardputer
@@ -37,13 +37,24 @@ M5 OS launcher  ←── reflash to return   /apps/manifest.json
 
 1. **Install base once:** PlatformIO upload or M5Burner → Cardputer target → flash M5 OS `.bin`
 2. **Add apps (no base reflash):**
-   - **Wi-Fi:** Menu → **Refresh manifest** → **Download from catalog**
+   - **Wi-Fi:** Menu → **Refresh manifest** → **Load from catalog**
    - **Offline:** Copy `.bin` to SD (see paths below)
    - **PC helper:** `python scripts/import_m5burner_entry.py --bin … --name … --merge data/manifest.example.json`
-3. **Run app:** Menu → **Launch installed app** → confirm **Enter flash app slot**
-4. **Return to M5 OS:** USB reflash M5 OS (PlatformIO or M5Burner). App `.bin` files **stay on SD**.
+3. **Switch / run app:** Menu → **Switch app (ESC/`)** → pick app → **Enter flash app slot**
+4. **Return to M5 OS:** Hold **ESC/` (backtick) at power-on** for recovery boot, or USB reflash M5 OS (PlatformIO or M5Burner). App `.bin` files **stay on SD**.
 
-Launching an app writes the SD `.bin` into the ESP32 OTA slot and reboots. M5 OS is no longer in flash until you reflash it — but you do **not** re-download apps from GitHub.
+Launching an app writes the SD `.bin` into the ESP32 OTA slot and reboots. M5 OS is no longer in flash until you reflash or use recovery boot — but you do **not** re-load apps from GitHub.
+
+### App switcher (ESC)
+
+| Key | In main menu | In app switcher |
+|-----|--------------|-----------------|
+| **ESC/`** | Opens **Switch app** picker | Returns to main menu |
+| **Tab** | — | Cycles to next installed app |
+| **;/. w/s** | Navigate menu | Navigate list |
+| **Enter** | Select menu item | Launch highlighted app |
+
+While a third-party app is running, M5 OS is not active — **hold ESC/` at power-on** to restore M5 OS boot (recovery), or USB reflash M5 OS to **COM13** (or your Cardputer port).
 
 ## User steps: Remote Possibility + BLE Bot
 
@@ -66,9 +77,9 @@ Insert **FAT32** microSD (contacts away from screen). Boot should show **VFS rea
 1. Menu → **WiFi setup** → connect
 2. **Refresh manifest** (loads Hacker Planet manifest + merges LauncherHub `category=cardputer`)
 3. Either:
-   - **Flash from M5Burner catalog** → pick firmware → pick version → confirm **Enter flash app slot** (Boris **OTA Install** — streams app slice via LauncherHub proxy, flashes OTA, **also saves** to `/apps/<slug>/`)
-   - **Download from catalog** → save `.bin` to SD only (Boris **Download→SD**)
-4. **Launch installed app** to re-flash from SD without Wi-Fi
+   - **Flash from M5Burner catalog** → pick firmware → saves to SD (SPIFFS/composite apps **do not auto-reboot** — M5 OS stays active)
+   - **Load from catalog** → save `.bin` to SD only
+4. **Switch app (ESC/`)** to launch from SD without Wi-Fi
 
 ### Option B — Manual SD sideload (no Wi-Fi)
 

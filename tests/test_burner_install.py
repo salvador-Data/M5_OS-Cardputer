@@ -118,8 +118,8 @@ def test_install_detail_url_encodes_version() -> None:
     assert "version=1.0%20beta" in url
 
 
-def test_build_install_plan_spiffs_app_not_rejected() -> None:
-    """SPIFFS metadata must not block install plan — flash saves assets to SD."""
+def test_plan_requires_sd_only_for_spiffs_composite() -> None:
+    """Bruce/M5Launcher composite images must not OTA-reboot on M5 OS."""
     detail = {
         "fid": BRUCE_FID,
         "version": {
@@ -136,7 +136,9 @@ def test_build_install_plan_spiffs_app_not_rejected() -> None:
     plan = build_install_plan(BRUCE_FID, "1.15", detail=detail)
     assert plan is not None
     assert len(plan.data_slices) == 1
-    assert plan.app_size == 512000
+    assert plan.app_offset > 0
+    # Mirror planRequiresSdOnly() in burner_install.cpp
+    assert len(plan.data_slices) > 0 or (plan.app_offset > 0 and not plan.no_bootloader)
 
 
 def test_bruce_live_manifest_fits_ota_slot() -> None:

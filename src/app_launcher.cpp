@@ -3,6 +3,7 @@
 #include "burner_install.h"
 #include "m5burner_hookup.h"
 #include "m5os_config.h"
+#include "M5OSDevice.h"
 #include "m5os_flash.h"
 #include "m5os_vfs.h"
 #include "m5os_security.h"
@@ -64,12 +65,10 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         log::info("launch_checksum_skip", safeBin);
     }
 
-    ui::drawHeader("Flashing app");
-    m5os::lcd().setCursor(4, 30);
-    m5os::lcd().println(safeBin);
-    m5os::lcd().setCursor(4, 44);
-    m5os::lcd().printf("%u bytes", static_cast<unsigned>(firmwareSize));
+    ui::showFlashProgress(0, "Flashing app", safeBin + "\n" + String(firmwareSize) + " bytes");
+    m5os::update();
 
+    saveHomeAppPartition();
     if (!Update.begin(firmwareSize)) {
         firmware.close();
         result.message = "Update.begin failed";
@@ -78,6 +77,7 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     }
 
     uint8_t buffer[512];
+    size_t written = 0;
     while (firmware.available()) {
         const size_t n = firmware.read(buffer, sizeof(buffer));
         if (Update.write(buffer, n) != n) {
@@ -86,6 +86,13 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
             result.message = "Write failed — launcher intact";
             log::info("launch_write_fail");
             return result;
+        }
+        written += n;
+        if (written == n || written % 4096 == 0 || !firmware.available()) {
+            const int pct = static_cast<int>(min(100ULL, (written * 100ULL) / firmwareSize));
+            ui::showFlashProgress(pct, "Flashing app",
+                                  String(written) + " / " + String(firmwareSize));
+            m5os::update();
         }
     }
     firmware.close();
@@ -157,7 +164,7 @@ LaunchResult AppLauncher::launchByPackageName(const String& packageName) {
         return launchBinFile(pkg->binFile);
     }
     LaunchResult result;
-    result.message = "App not on SD:\n" + packageName + "\nDownload or copy .bin";
+    result.message = "App not on SD:\n" + packageName + "\nLoad from catalog or copy .bin";
     return result;
 }
 

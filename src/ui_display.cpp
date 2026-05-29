@@ -495,6 +495,65 @@ void drawSubtleSmirk(Display& d, int cx, int baseY, int halfW, uint16_t ink) {
     }
 }
 
+struct MaskPoint {
+    int x;
+    int y;
+};
+
+// Guy Fawkes mask outline — flat wide forehead, cheekbones widest, pointed chin.
+// Coordinates are hundredths of faceR relative to (cx, cy); not an ellipse/egg.
+struct MaskOutlineVertex {
+    int8_t xPer100;
+    int8_t yPer100;
+};
+
+constexpr MaskOutlineVertex kGuyFawkesSilhouette[] = {
+    {-78, -94},  // top-left — wide flat forehead
+    {78, -94},   // top-right — horizontal crown edge
+    {88, -30},   // right upper temple
+    {94, 8},     // right cheekbone (widest)
+    {80, 38},    // right upper jaw taper
+    {44, 66},    // right lower jaw
+    {0, 98},     // chin point
+    {-44, 66},   // left lower jaw
+    {-80, 38},   // left upper jaw taper
+    {-94, 8},    // left cheekbone (widest)
+    {-88, -30},  // left upper temple
+};
+
+constexpr int kGuyFawkesSilhouetteCount =
+    static_cast<int>(sizeof(kGuyFawkesSilhouette) / sizeof(kGuyFawkesSilhouette[0]));
+
+int scaleMaskCoord(int faceR, int8_t per100) {
+    return (faceR * static_cast<int>(per100)) / 100;
+}
+
+int buildGuyFawkesSilhouette(int cx, int cy, int faceR, MaskPoint* out, int maxPts) {
+    const int count = min(kGuyFawkesSilhouetteCount, maxPts);
+    for (int i = 0; i < count; ++i) {
+        out[i].x = cx + scaleMaskCoord(faceR, kGuyFawkesSilhouette[i].xPer100);
+        out[i].y = cy + scaleMaskCoord(faceR, kGuyFawkesSilhouette[i].yPer100);
+    }
+    return count;
+}
+
+template <typename Display>
+void fillClosedPolygon(Display& d, const MaskPoint* pts, int count, uint16_t color) {
+    if (count < 3) return;
+    for (int i = 1; i < count - 1; ++i) {
+        d.fillTriangle(pts[0].x, pts[0].y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, color);
+    }
+}
+
+template <typename Display>
+void strokeClosedPolygon(Display& d, const MaskPoint* pts, int count, uint16_t color) {
+    if (count < 2) return;
+    for (int i = 0; i < count; ++i) {
+        const int next = (i + 1) % count;
+        d.drawLine(pts[i].x, pts[i].y, pts[next].x, pts[next].y, color);
+    }
+}
+
 template <typename Display>
 void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
     const uint16_t ringColor = lerp565(gTheme.primary, gTheme.secondary, pulse);
@@ -510,36 +569,45 @@ void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
         d.drawCircle(cx, cy - 1, radius, fade);
     }
 
-    const int faceW = max(7, (faceR * 14) / 20);
-    const int faceH = max(12, faceR + (faceR * 19) / 20);
-    const int chinY = cy + faceH / 2 + max(3, faceR / 2);
-    const int chinJoinY = cy + faceH / 3;
-    const int jawNarrow = max(2, faceW / 3);
+    MaskPoint outline[kGuyFawkesSilhouetteCount + 1]{};
+    const int outlineCount = buildGuyFawkesSilhouette(cx, cy, faceR, outline, kGuyFawkesSilhouetteCount);
 
-    d.fillEllipse(cx, cy - 2, faceW + 1, faceH + 1, ink);
-    d.fillEllipse(cx, cy - 2, faceW, faceH, faceColor);
-    d.fillTriangle(cx - jawNarrow, chinJoinY, cx + jawNarrow, chinJoinY, cx, chinY + 1, ink);
-    d.fillTriangle(cx - jawNarrow + 1, chinJoinY + 1, cx + jawNarrow - 1, chinJoinY + 1, cx,
-                   chinY, faceColor);
+    const int cheekHalfW = max(7, scaleMaskCoord(faceR, 94));
+    const int foreheadHalfW = max(6, scaleMaskCoord(faceR, 78));
+    const int chinY = cy + scaleMaskCoord(faceR, 98);
+    const int jawJoinY = cy + scaleMaskCoord(faceR, 38);
+    const int cheekMidY = cy + scaleMaskCoord(faceR, 8);
+    const int cheekTopY = cy + scaleMaskCoord(faceR, -30);
 
-    const int cheekTopY = cy - faceH / 5;
-    const int cheekMidY = cy + faceR / 6;
-    const int cheekBotY = chinJoinY - 1;
-    d.drawLine(cx - faceW + 1, cheekTopY, cx - faceW + 2, cheekMidY, ink);
-    d.drawLine(cx - faceW + 2, cheekMidY, cx - jawNarrow - 1, cheekBotY, ink);
-    d.drawLine(cx + faceW - 1, cheekTopY, cx + faceW - 2, cheekMidY, ink);
-    d.drawLine(cx + faceW - 2, cheekMidY, cx + jawNarrow + 1, cheekBotY, ink);
+    // 1 px black halo, cream fill, black stroke — closed polygon silhouette.
+    MaskPoint halo[kGuyFawkesSilhouetteCount + 1]{};
+    for (int i = 0; i < outlineCount; ++i) {
+        const int dx = outline[i].x - cx;
+        const int dy = outline[i].y - cy;
+        const int dist = max(abs(dx), abs(dy));
+        const int expand = (dist > 0) ? max(1, faceR / 24) : 1;
+        halo[i].x = outline[i].x + (dx > 0 ? expand : (dx < 0 ? -expand : 0));
+        halo[i].y = outline[i].y + (dy > 0 ? expand : (dy < 0 ? -expand : 0));
+    }
+    fillClosedPolygon(d, halo, outlineCount, ink);
+    fillClosedPolygon(d, outline, outlineCount, faceColor);
+    strokeClosedPolygon(d, outline, outlineCount, ink);
+
+    d.drawLine(cx - foreheadHalfW + 2, cheekTopY, cx - cheekHalfW + 1, cheekMidY, ink);
+    d.drawLine(cx - cheekHalfW + 1, cheekMidY, cx - scaleMaskCoord(faceR, 44), jawJoinY, ink);
+    d.drawLine(cx + foreheadHalfW - 2, cheekTopY, cx + cheekHalfW - 1, cheekMidY, ink);
+    d.drawLine(cx + cheekHalfW - 1, cheekMidY, cx + scaleMaskCoord(faceR, 44), jawJoinY, ink);
     if (faceR >= 14) {
-        d.drawPixel(cx - faceW / 2, cheekMidY, kCheekShadow);
-        d.drawPixel(cx - faceW / 2 + 1, cheekMidY + 1, kCheekShadow);
-        d.drawPixel(cx + faceW / 2, cheekMidY, kCheekShadow);
-        d.drawPixel(cx + faceW / 2 - 1, cheekMidY + 1, kCheekShadow);
+        d.drawPixel(cx - cheekHalfW / 2, cheekMidY, kCheekShadow);
+        d.drawPixel(cx - cheekHalfW / 2 + 1, cheekMidY + 1, kCheekShadow);
+        d.drawPixel(cx + cheekHalfW / 2, cheekMidY, kCheekShadow);
+        d.drawPixel(cx + cheekHalfW / 2 - 1, cheekMidY + 1, kCheekShadow);
     }
 
-    const int eyeY = cy - faceH / 6;
+    const int eyeY = cy + scaleMaskCoord(faceR, -24);
     const int eyeGap = max(2, faceR / 7);
     const int eyeLift = max(2, faceR / 4);
-    const int eyeSpan = max(3, faceW - max(4, faceR / 3));
+    const int eyeSpan = max(3, cheekHalfW - max(4, faceR / 4));
     const int leftOuterX = cx - eyeSpan;
     const int leftInnerX = cx - eyeGap;
     const int rightInnerX = cx + eyeGap;
@@ -559,20 +627,16 @@ void drawGuyFawkesMask(Display& d, int cx, int cy, int faceR, uint8_t pulse) {
         d.drawPixel(cx + 1, noseTop + noseLen - 1, ink);
     }
 
-    const int stashY = cy + max(2, faceR / 4);
-    drawHandlebarMustache(d, cx, stashY, faceW, faceR, ink);
+    const int stashY = cy + scaleMaskCoord(faceR, 28);
+    drawHandlebarMustache(d, cx, stashY, cheekHalfW, faceR, ink);
 
     const int smileY = stashY + max(2, faceR / 6);
-    drawSubtleSmirk(d, cx, smileY, max(3, faceW / 3), ink);
+    drawSubtleSmirk(d, cx, smileY, max(3, cheekHalfW / 3), ink);
 
     const int goateeTop = smileY + max(2, faceR / 8);
     const int goateeW = max(1, faceR / 7);
     d.fillTriangle(cx - goateeW, goateeTop, cx + goateeW, goateeTop, cx, chinY - 1, ink);
     d.drawFastVLine(cx, goateeTop, chinY - goateeTop - 1, ink);
-
-    d.drawEllipse(cx, cy - 2, faceW, faceH, ink);
-    d.drawLine(cx - jawNarrow, chinJoinY, cx, chinY, ink);
-    d.drawLine(cx + jawNarrow, chinJoinY, cx, chinY, ink);
     d.drawPixel(cx, chinY, ink);
 }
 
@@ -727,6 +791,52 @@ void showBootFrame(int percent, const char* label, const String& detail, uint8_t
 
 }  // namespace
 
+static void drawFlashProgressFrame(lgfx::LovyanGFX& d, int percent, const char* label,
+                                   const String& detail) {
+    Theme& t = theme();
+    d.fillScreen(TFT_BLACK);
+    d.setTextColor(t.primary, TFT_BLACK);
+    d.setCursor(4, 4);
+    d.printf("%s", label ? label : "Transfer");
+    d.drawFastHLine(0, 18, d.width(), t.secondary);
+
+    const int barX = 10;
+    const int barY = 56;
+    const int barW = d.width() - 20;
+    const int barH = 10;
+    d.drawRect(barX, barY, barW, barH, t.secondary);
+    const int clamped = max(0, min(100, percent));
+    const int fillW = max(1, (barW - 2) * clamped / 100);
+    d.fillRect(barX + 1, barY + 1, fillW, barH - 2, t.primary);
+
+    d.setTextColor(TFT_WHITE, TFT_BLACK);
+    d.setCursor(10, 72);
+    d.printf("%d%%", clamped);
+
+    if (detail.length()) {
+        d.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        d.setCursor(10, 86);
+        d.println(detail);
+    }
+
+    d.drawFastHLine(0, d.height() - 14, d.width(), t.primary);
+    d.setCursor(6, d.height() - 12);
+    d.setTextColor(t.secondary, TFT_BLACK);
+    d.print("Authorized lab use only");
+}
+
+void showFlashProgress(int percent, const char* label, const String& detail) {
+    auto& lcd = m5os::lcd();
+    lgfx::LGFX_Sprite canvas(&lcd);
+    if (canvas.createSprite(lcd.width(), lcd.height())) {
+        drawFlashProgressFrame(canvas, percent, label, detail);
+        canvas.pushSprite(0, 0);
+        canvas.deleteSprite();
+        return;
+    }
+    drawFlashProgressFrame(lcd, percent, label, detail);
+}
+
 Theme& theme() { return gTheme; }
 
 int getThemePreset() { return gThemePreset; }
@@ -876,10 +986,12 @@ void drawHelpOverlay() {
     d.setTextColor(TFT_WHITE, TFT_BLACK);
     d.setCursor(4, 24);
     d.println(";/. w/s  navigate");
-    d.println("Enter     select");
+    d.println("Enter     select / launch");
+    d.println("ESC/`     app switcher (main menu)");
+    d.println("Tab       next app (in switcher)");
     d.println("h / ?     this help");
     d.println("e         export catalog serial");
-    d.println("`         back");
+    d.println("ESC/`     back (submenus)");
     d.setTextColor(TFT_DARKGREY, TFT_BLACK);
     d.setCursor(4, 110);
     d.print("Authorized lab only");
