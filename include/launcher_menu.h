@@ -12,6 +12,7 @@ public:
     void runMainLoop();
     void showInstalledApps();
     void showDownloadCatalog();
+    void showFlashBurnerCatalog();
     void refreshCatalog();
     void showFileExplorer(const char* path);
     void showThemeMenu();

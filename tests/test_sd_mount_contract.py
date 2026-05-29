@@ -39,19 +39,46 @@ def test_vfs_uses_global_spi_like_official_example():
 
 def test_vfs_mount_retries_and_never_tears_down_spi():
     text = VFS_CPP.read_text(encoding="utf-8")
+    assert "tryOfficialMount" in text
     assert "sd_mount_retry" in text
     assert "25000000" in text
-    assert "1000000" in text
     assert "vfs_ready" in text
     assert "mountFailureMessage" in text
+    assert "delay(800)" not in text
 
 
-def test_boot_mounts_sd_before_splash():
+def test_vfs_ensure_directory_chain_and_quarantine():
+    text = VFS_CPP.read_text(encoding="utf-8")
+    assert "ensureDirectory" in text
+    assert "ensureDirectoryChain" in text
+    assert "mkdirViaParent" in text
+    assert ".m5os_bak" in text
+    assert "pathKind" in text
+    assert "isDirectory()" in text
+    assert "ensureDirectoryChain(dir, &vfsStepError)" in text
+    assert "errnoHint" in text
+    assert 'current += path[i]' not in text
+
+
+def test_vfs_root_probe_before_tree():
+    text = VFS_CPP.read_text(encoding="utf-8")
+    assert 'kProbe = "/.m5os_probe"' in text
+    assert "/system/.sd_probe" not in text
+    mount_fn = text[text.index("MountResult mountAndInit()") : text.index("}  // namespace m5os::vfs")]
+    probe_call_idx = mount_fn.index("verifySdReadWrite(&vfsStepError)")
+    tree_idx = mount_fn.index("ensureDirectoryChain(dir")
+    assert probe_call_idx < tree_idx
+    assert "mkdirIfMissing(kSystemDir" not in mount_fn
+
+
+def test_boot_mounts_sd_after_display_like_official():
     text = MAIN_CPP.read_text(encoding="utf-8")
     assert "ensureStorage()" in text
-    idx = text.index("ensureStorage()")
-    splash = text.index("bootIntroBegin")
-    assert idx < splash
+    begin_idx = text.index("m5os::begin()")
+    storage_idx = text.index("ensureStorage()")
+    splash_idx = text.index("bootIntroBegin")
+    assert begin_idx < storage_idx < splash_idx
+    assert "primeSdPinsPreDisplay" not in text
 
 
 def test_official_m5_example_pins_if_present():

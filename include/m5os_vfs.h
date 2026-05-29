@@ -45,6 +45,12 @@ String joinPath(const String& parent, const String& segment);
 /** Mount SD and create the OS directory tree. */
 MountResult mountAndInit();
 
+/** Hold CS high before display init (call before M5Cardputer.begin). */
+void primeSdPinsPreDisplay();
+
+/** Re-init SPI after display/keyboard init (call before mountAndInit). */
+void reinitSpiPostDisplay();
+
 /** Resolve app compartment dir: /apps/<slug>/ */
 String appDirFor(const String& appSlug);
 

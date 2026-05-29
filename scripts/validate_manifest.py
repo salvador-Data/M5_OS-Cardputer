@@ -18,10 +18,14 @@ ALLOWED_HOSTS = {
     "raw.githubusercontent.com": "/salvador-Data/",
     "hackerplanet.dev": None,
     "www.hackerplanet.dev": None,
+    "api.launcherhub.net": ("/firmwares", "/download"),
+    "m5burner-cdn.m5stack.com": "/firmware/",
 }
 
 BIN_NAME = re.compile(r"^[A-Za-z0-9._-]+\.bin$")
 SHA256_HEX = re.compile(r"^[0-9a-fA-F]{64}$")
+FID_HEX = re.compile(r"^[0-9a-fA-F]{32}$")
+BURNER_FILE = re.compile(r"^[A-Za-z0-9._-]+\.bin$")
 
 
 MAX_APP_BIN_BYTES = 3145728
@@ -38,11 +42,32 @@ def _check_url(url: str, field: str) -> None:
     slash = rest.find("/")
     host = rest if slash < 0 else rest[:slash]
     path = "/" if slash < 0 else rest[slash:]
-    prefix = ALLOWED_HOSTS.get(host)
-    if prefix is None and host not in ALLOWED_HOSTS:
+    rule = ALLOWED_HOSTS.get(host)
+    if rule is None and host not in ALLOWED_HOSTS:
         raise ManifestError(f"{field}: host not allowed: {host}")
-    if prefix is not None and not path.startswith(prefix):
-        raise ManifestError(f"{field}: path must start with {prefix!r}")
+    if isinstance(rule, tuple):
+        if not any(path.startswith(prefix) for prefix in rule):
+            raise ManifestError(f"{field}: path must start with one of {rule!r}")
+    elif isinstance(rule, str) and not path.startswith(rule):
+        raise ManifestError(f"{field}: path must start with {rule!r}")
+
+
+def _check_fid(value: str, field: str) -> str:
+    if not FID_HEX.match(value):
+        raise ManifestError(f"{field}: fid must be 32 hex chars")
+    return value.lower()
+
+
+def _check_burner_file(name: str, field: str) -> None:
+    if name.startswith("https://"):
+        _check_url(name, field)
+        return
+    if ".." in name or "/" in name or "\\" in name:
+        raise ManifestError(f"{field}: path traversal rejected")
+    if not BURNER_FILE.match(name):
+        raise ManifestError(f"{field}: invalid M5Burner file {name!r}")
+    if len(name) > 96:
+        raise ManifestError(f"{field}: M5Burner file name too long")
 
 
 def _check_bin(name: str, field: str) -> None:
@@ -76,6 +101,14 @@ def validate_manifest(data: dict[str, Any]) -> list[dict[str, Any]]:
         url = str(item.get("url", "")).strip()
         if url:
             _check_url(url, f"firmware[{i}].url")
+        fid = str(item.get("fid", "")).strip()
+        if fid:
+            _check_fid(fid, f"firmware[{i}].fid")
+        burner_file = str(item.get("file", "")).strip()
+        if burner_file:
+            _check_burner_file(burner_file, f"firmware[{i}].file")
+        if not url and not fid:
+            raise ManifestError(f"firmware[{i}] requires url or fid")
         bin_name = str(item.get("bin", "")).strip()
         if not bin_name:
             slug = name.lower().replace(" ", "_") + ".bin"

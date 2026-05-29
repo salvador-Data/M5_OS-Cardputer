@@ -10,6 +10,8 @@ struct FirmwarePackage {
     String slug;  // compartment dir under /apps/<slug>/
     String version;
     String url;
+    String fid;   // M5Burner / LauncherHub firmware id (32 hex)
+    String file;  // M5Burner CDN filename or full https URL
     size_t size = 0;
     String description;
     String binFile;  // SD filename without path, e.g. ble_bot.bin
@@ -22,6 +24,7 @@ public:
     bool ensureStorage();
     void scanInstalled();
     bool refreshFromNetwork(const char* manifestUrl);
+    bool refreshFromBurnerHub(uint8_t page = 1);
     bool refreshFromSdManifest();
     bool downloadPackage(const FirmwarePackage& pkg);
     const std::vector<FirmwarePackage>& installed() const { return installed_; }

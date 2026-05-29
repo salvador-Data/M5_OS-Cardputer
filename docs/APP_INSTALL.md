@@ -20,7 +20,7 @@ This guide explains how to add **Remote Possibility**, **BLE Bot**, and other Ca
 
 - It does **not** keep Hacker Planet apps on SD while preserving M5 OS in flash — a full flash **replaces everything** in the app partition
 - It does **not** use our `/apps/manifest.json` catalog or SHA256 whitelist
-- Official M5Burner download URLs are **not** on the M5 OS HTTPS whitelist (`github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, `hackerplanet.dev`)
+- Official third-party M5Burner CDN URLs were previously blocked — M5 OS now allows **LauncherHub** and **M5Burner CDN** for Boris-style discovery/download and **on-device OTA flash** (apps also saved to SD)
 
 **Rule of thumb:** M5Burner = **base OS once** (+ recovery). M5 OS menu = **apps on SD**.
 
@@ -61,12 +61,14 @@ Or M5Burner: Cardputer target → select M5 OS release `.bin`.
 
 Insert **FAT32** microSD (contacts away from screen). Boot should show **VFS ready**.
 
-### Option A — Wi-Fi catalog (M5Burner-like UX, apps only)
+### Option A — Wi-Fi catalog (M5Burner-like UX)
 
 1. Menu → **WiFi setup** → connect
-2. **Refresh manifest** (loads `data/manifest.example.json` from GitHub by default)
-3. **Download from catalog** → pick **Remote Possibility** or **BLE Bot**
-4. **Launch installed app** when ready
+2. **Refresh manifest** (loads Hacker Planet manifest + merges LauncherHub `category=cardputer`)
+3. Either:
+   - **Flash from M5Burner catalog** → pick firmware → pick version → confirm **Enter flash app slot** (Boris **OTA Install** — streams app slice via LauncherHub proxy, flashes OTA, **also saves** to `/apps/<slug>/`)
+   - **Download from catalog** → save `.bin` to SD only (Boris **Download→SD**)
+4. **Launch installed app** to re-flash from SD without Wi-Fi
 
 ### Option B — Manual SD sideload (no Wi-Fi)
 
@@ -99,7 +101,7 @@ Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub o
 
 | Control | Detail |
 |---------|--------|
-| HTTPS whitelist | Downloads only from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, `hackerplanet.dev` |
+| HTTPS whitelist | Downloads from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, `hackerplanet.dev`, `api.launcherhub.net`, `m5burner-cdn.m5stack.com` |
 | SHA256 | Optional per manifest entry; verified on download and before flash |
 | Size limit | App bins capped at **3 MiB** (`kMaxAppBinBytes`) — matches default 8 MB OTA slot |
 | Path safety | No `..` or slashes in bin names; slugs sanitized |
@@ -131,8 +133,9 @@ You do **not** re-flash base when adding, updating, or deleting app `.bin` files
 |---------|--------|
 | SD manifest + Wi-Fi download + launch | **Shipped** |
 | SHA256 + HTTPS whitelist + size cap | **Shipped** |
-| Host importer from local/M5Burner `.bin` | **Shipped** (`scripts/import_m5burner_entry.py`) |
-| On-device M5Burner online catalog | Not planned — URLs outside whitelist; use Hacker Planet manifest |
+| On-device M5Burner online catalog (LauncherHub hookup) | **Shipped** — `Refresh manifest` merges Hacker Planet manifest + Boris LauncherHub `category=cardputer` list |
+| On-device M5Burner OTA flash (Boris `installFirmwareFromManifest` app slice) | **Shipped** — **Flash from M5Burner catalog**; HTTP Range via `api.launcherhub.net/download?fid=…&file=…`; skips bootloader offset (`ao`/`source_offset`); saves app copy to SD |
+| Host M5Burner cache import | **Shipped** (`scripts/import_m5burner_entry.py` — `--fid`, `--file`, `--burner-cache`, Windows `%LOCALAPPDATA%\M5Burner\packages\fw\…`) |
 | Dual-partition launcher (return without USB, like bmorcelli Launcher) | Roadmap — requires custom `partitions.csv` |
 | WebUI OTA upload from phone/PC | Roadmap |
 | Auto-register SD-dropped bins in manifest | Partial — `scanInstalled()` lists them; manifest optional for SHA256 |
@@ -145,7 +148,8 @@ M5 OS persists user choices on the FAT32 microSD. If the card is missing or moun
 |------|-----------|---------|
 | Theme (Baby Blue, Hacker Green, etc.) | **Theme** | `/home/default/settings.json` (`theme`: 0–3) |
 | Wi-Fi SSID + password (lab use) | **WiFi setup** → connect | Same file (`wifi.ssid`, `wifi.pass`) — **plaintext on SD** |
-| App `.bin` from catalog | **Download from catalog** | `/apps/<slug>/<app>.bin` (confirm: **Saved to /apps/...**) |
+| App `.bin` from catalog | **Download from catalog** | `/apps/<slug>/<app>.bin` |
+| App flash from M5Burner/LauncherHub | **Flash from M5Burner catalog** | OTA slot + copy to `/apps/<slug>/` |
 | Manifest (offline) | Copy from PC | `/apps/manifest.json` |
 | Per-app data | (apps write at runtime) | `/home/default/apps/<slug>/` |
 | Log export snapshot | **Save / export to SD** → Export log | `/home/default/saves/log_export_<ms>.txt` |
@@ -154,6 +158,24 @@ M5 OS persists user choices on the FAT32 microSD. If the card is missing or moun
 | Browse SD | **File explorer** | Any mounted path |
 
 Theme and Wi-Fi load automatically on boot when SD is mounted and `settings.json` exists.
+
+### Optional boot intro WAV (user-provided)
+
+M5 OS does **not** ship copyrighted music in firmware. If you own a licensed copy of a boot clip (for example *Mr. Roboto* by Styx), you may add it to microSD as **`mr_roboto.wav`** (PCM WAV, 8- or 16-bit mono/stereo). On boot, M5 OS searches (first match wins):
+
+```text
+/home/default/boot/mr_roboto.wav
+/system/boot/mr_roboto.wav
+/boot/mr_roboto.wav
+```
+
+The file plays during the Hacker Planet Guy Fawkes intro animation. If the card is missing, the file is absent, or power saving (**SAV**) is active, firmware plays an **original** short robotic synth theme instead. Post-intro boot stages stay quiet.
+
+Create the folder on SD if needed (example):
+
+```text
+/home/default/boot/
+```
 
 ### Re-flash steps (when you need the launcher back)
 

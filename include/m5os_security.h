@@ -5,7 +5,7 @@
 
 namespace m5os::security {
 
-/** HTTPS URLs from github.com/salvador-Data, raw.githubusercontent.com/salvador-Data, or hackerplanet.dev */
+/** HTTPS URLs from github.com/salvador-Data, raw.githubusercontent.com/salvador-Data, hackerplanet.dev, LauncherHub, or M5Burner CDN */
 bool isAllowedHttpsUrl(const String& url);
 
 /** SD filename only — rejects path traversal and invalid characters. */
@@ -25,5 +25,11 @@ String computeSha256Hex(const uint8_t* data, size_t len);
 String computeFileSha256Hex(File& file);
 
 bool sha256Equal(const String& expected, const String& actual);
+
+/** M5Burner / LauncherHub firmware id — 32 lowercase hex chars. */
+String normalizeBurnerFid(const String& raw);
+
+/** M5Burner CDN filename or whitelisted https URL. */
+String sanitizeBurnerFile(const String& raw);
 
 }  // namespace m5os::security

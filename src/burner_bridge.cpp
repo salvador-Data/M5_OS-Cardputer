@@ -7,12 +7,14 @@ namespace m5os::burner {
 
 void logWorkflowToSerial() {
     log::info("burner_workflow",
-              "M5Burner=base M5 OS flash once; apps stay on SD /apps/; "
-              "re-flash M5 OS only after running an app or OS update");
+              "M5Burner desktop=base OS USB flash; on-device Flash from M5Burner catalog=LauncherHub OTA; "
+              "apps also saved to SD /apps/; re-flash M5 OS base after running an app");
 }
 
 String recoveryInstructions() {
-    return "M5Burner/PlatformIO: flash M5 OS base only.\nApps remain on SD /apps/.";
+    return "USB: M5Burner/PlatformIO flash M5 OS base.\n"
+           "On-device: Flash from M5Burner catalog.\n"
+           "Apps stay on SD /apps/.";
 }
 
 void showHelpScreen() {

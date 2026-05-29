@@ -43,6 +43,29 @@ def test_import_creates_valid_entry(tmp_path: Path) -> None:
     assert len(entry["sha256"]) == 64
 
 
+def test_import_with_fid_file_builds_launcherhub_url(tmp_path: Path) -> None:
+    bin_path = tmp_path / "demo_app.bin"
+    bin_path.write_bytes(b"\x01" * 64)
+    out = tmp_path / "manifest.json"
+    result = run_importer(
+        "--bin",
+        str(bin_path),
+        "--name",
+        "Demo Burner App",
+        "--fid",
+        "967e0377b9889c7b82f059fb8a30adda",
+        "--file",
+        "61ae83f2814a8adf2442ef85a0a3d69b.bin",
+        "-o",
+        str(out),
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(out.read_text(encoding="utf-8"))
+    entry = data["firmware"][0]
+    assert entry["fid"] == "967e0377b9889c7b82f059fb8a30adda"
+    assert "api.launcherhub.net/download" in entry["url"]
+
+
 def test_rejects_oversized_bin(tmp_path: Path) -> None:
     bin_path = tmp_path / "huge.bin"
     # 3 MiB + 1 byte exceeds kMaxAppBinBytes

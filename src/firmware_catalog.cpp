@@ -1,5 +1,6 @@
 #include "firmware_catalog.h"
 
+#include "m5burner_hookup.h"
 #include "m5os_config.h"
 #include "m5os_security.h"
 #include "m5os_vfs.h"
@@ -34,6 +35,8 @@ bool parseManifestPayload(const String& payload, std::vector<FirmwarePackage>& o
         pkg.slug = vfs::slugFromName(pkg.name);
         pkg.version = item["version"] | "1.0.0";
         pkg.url = item["url"] | "";
+        pkg.fid = security::normalizeBurnerFid(item["fid"] | "");
+        pkg.file = security::sanitizeBurnerFile(item["file"] | "");
         pkg.size = item["size"] | 0;
         pkg.description = item["description"] | "";
         pkg.sha256 = security::normalizeSha256Hex(item["sha256"] | "");
@@ -42,6 +45,16 @@ bool parseManifestPayload(const String& payload, std::vector<FirmwarePackage>& o
         if (!pkg.binFile.length()) continue;
         if (pkg.url.length() && !security::isAllowedHttpsUrl(pkg.url)) {
             log::info("manifest_url_rejected", pkg.name);
+            continue;
+        }
+        if (!pkg.url.length() && pkg.fid.length() && pkg.file.length()) {
+            pkg.url = burner::resolveDownloadUrl(pkg.fid, pkg.file);
+        }
+        if (!pkg.url.length() && pkg.fid.length()) {
+            // Burner catalog entry — resolve download URL when user installs.
+            pkg.version = pkg.version.length() ? pkg.version : "burner";
+        } else if (!pkg.url.length()) {
+            log::info("manifest_entry_rejected", pkg.name);
             continue;
         }
         out.push_back(pkg);
@@ -241,13 +254,42 @@ bool FirmwareCatalog::loadSdManifestFrom(const char* path) {
     return true;
 }
 
+bool FirmwareCatalog::refreshFromBurnerHub(uint8_t page) {
+    if (WiFi.status() != WL_CONNECTED) return false;
+    std::vector<FirmwarePackage> burner;
+    if (!burner::fetchCatalogPage(page, burner)) return false;
+    for (const auto& pkg : burner) {
+        bool duplicate = false;
+        for (const auto& existing : available_) {
+            if ((pkg.fid.length() && existing.fid == pkg.fid) ||
+                existing.binFile == pkg.binFile) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) available_.push_back(pkg);
+    }
+    scanInstalled();
+    log::info("burner_catalog_loaded", String(burner.size()) + " packages");
+    return true;
+}
+
 bool FirmwareCatalog::refreshFromSdManifest() {
     if (loadSdManifestFrom(kSdManifestPath)) return true;
     return loadSdManifestFrom(kLegacyManifestPath);
 }
 
-bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkg) {
+bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkgIn) {
     if (!vfs::isMounted() && !ensureStorage()) return false;
+    FirmwarePackage pkg = pkgIn;
+    if (!pkg.url.length() && pkg.fid.length()) {
+        if (!burner::enrichPackageFromBurner(pkg)) {
+            log::info("burner_enrich_fail", pkg.name);
+            return false;
+        }
+    } else if (!pkg.url.length() && pkg.fid.length() && pkg.file.length()) {
+        pkg.url = burner::resolveDownloadUrl(pkg.fid, pkg.file);
+    }
     if (WiFi.status() != WL_CONNECTED || !pkg.url.length()) return false;
     if (!security::isAllowedHttpsUrl(pkg.url)) {
         log::info("download_url_rejected", pkg.name);

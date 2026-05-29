@@ -1,5 +1,6 @@
 #include "launcher_menu.h"
 
+#include "burner_install.h"
 #include "burner_bridge.h"
 #include "m5os_config.h"
 #include "m5os_gc.h"
@@ -131,10 +132,78 @@ void LauncherMenu::showDownloadCatalog() {
     }
 }
 
+void LauncherMenu::showFlashBurnerCatalog() {
+    if (!settings::ensureSdMounted()) {
+        showSdRequired("Flash saves app to SD");
+        return;
+    }
+    if (!wifiIsConnected()) {
+        ui::showMessage("M5Burner flash", "WiFi required", TFT_RED);
+        return;
+    }
+
+    std::vector<FirmwarePackage> burnerEntries;
+    for (const auto& pkg : catalog_.available()) {
+        if (pkg.fid.length()) burnerEntries.push_back(pkg);
+    }
+    if (burnerEntries.empty()) {
+        ui::showMessage("M5Burner flash", "Refresh manifest first\n(no LauncherHub entries)", TFT_YELLOW);
+        return;
+    }
+
+    std::vector<String> labels;
+    for (const auto& pkg : burnerEntries) {
+        String line = pkg.name;
+        if (pkg.version.length() && pkg.version != "burner") line += " v" + pkg.version;
+        if (pkg.installed) line += " [SD]";
+        labels.push_back(line);
+    }
+    const int pick = ui::selectFromList(labels, "M5Burner flash");
+    if (pick < 0) return;
+
+    const FirmwarePackage& pkg = burnerEntries[pick];
+    String version = pkg.version;
+    if (version == "burner" || !version.length()) version = "";
+
+    std::vector<burner::BurnerVersionInfo> versions;
+    if (burner::fetchVersionList(pkg.fid, versions) && versions.size() > 1) {
+        std::vector<String> versionLabels;
+        for (const auto& info : versions) versionLabels.push_back(info.version);
+        const int versionPick = ui::selectFromList(versionLabels, "Pick version");
+        if (versionPick < 0) return;
+        version = versions[versionPick].version;
+    } else if (versions.size() == 1) {
+        version = versions[0].version;
+    }
+
+    ui::drawHeader("M5Burner flash");
+    m5os::lcd().setCursor(4, 28);
+    m5os::lcd().println(pkg.name);
+    m5os::lcd().setCursor(4, 44);
+    m5os::lcd().println(version.length() ? version : "latest");
+    m5os::lcd().setCursor(4, 64);
+    m5os::lcd().print("Enter flash app slot");
+    m5os::lcd().setCursor(4, 78);
+    m5os::lcd().print("` cancel  (copy to SD too)");
+
+    while (true) {
+        m5os::update();
+        Buttons keys = m5os::readButtons();
+        if (keys.back) return;
+        if (keys.ok) {
+            LaunchResult result = launcher_.flashBurnerPackage(pkg, version);
+            if (!result.ok) ui::showMessage("Flash failed", result.message, TFT_RED);
+            return;
+        }
+        delay(power::uiLoopDelayMs());
+    }
+}
+
 void LauncherMenu::refreshCatalog() {
     bool ok = false;
     if (wifiIsConnected()) {
         ok = catalog_.refreshFromNetwork(kDefaultManifestUrl);
+        if (catalog_.refreshFromBurnerHub(1)) ok = true;
     }
     if (!ok) ok = catalog_.refreshFromSdManifest();
     if (ok) {
@@ -290,15 +359,16 @@ void LauncherMenu::showHelp() { ui::drawHelpOverlay(); }
 
 void LauncherMenu::runMainLoop() {
     static const char* items[] = {
+        "WiFi setup",
         "Launch installed app",
         "Download from catalog",
+        "Flash from M5Burner catalog",
         "Refresh manifest",
         "Storage cleanup",
         "Export catalog (serial)",
         "File explorer",
         "Save / export to SD",
         "Theme",
-        "WiFi setup",
         "M5Burner / recovery",
         "Keyboard shortcuts",
     };
@@ -310,37 +380,40 @@ void LauncherMenu::runMainLoop() {
         if (pick < 0) return;
         switch (pick) {
             case 0:
-                showInstalledApps();
+                showWifiSetup();
                 break;
             case 1:
-                showDownloadCatalog();
+                showInstalledApps();
                 break;
             case 2:
-                refreshCatalog();
+                showDownloadCatalog();
                 break;
             case 3:
-                showStorageCleanup();
+                showFlashBurnerCatalog();
                 break;
             case 4:
+                refreshCatalog();
+                break;
+            case 5:
+                showStorageCleanup();
+                break;
+            case 6:
                 exportCatalogSerial();
                 ui::showMessage("Exported", "Catalog on USB serial", TFT_GREEN, 900);
                 break;
-            case 5:
+            case 7:
                 showFileExplorer("/");
                 break;
-            case 6:
+            case 8:
                 showSaveExportMenu();
                 break;
-            case 7:
+            case 9:
                 showThemeMenu();
                 break;
-            case 8:
-                showWifiSetup();
-                break;
-            case 9:
+            case 10:
                 showBurnerBridge();
                 break;
-            case 10:
+            case 11:
                 showHelp();
                 break;
             default:

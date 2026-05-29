@@ -1,12 +1,16 @@
 #include "app_launcher.h"
 
+#include "burner_install.h"
+#include "m5burner_hookup.h"
 #include "m5os_config.h"
+#include "m5os_vfs.h"
 #include "m5os_security.h"
 #include "serial_log.h"
 #include "ui_display.h"
 
 #include <SD.h>
 #include <Update.h>
+#include <WiFi.h>
 #include <esp_system.h>
 
 namespace m5os {
@@ -96,6 +100,53 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     ui::showMessage("Launch", safeBin + "\nRebooting...", TFT_GREEN, 1200);
     delay(300);
     esp_restart();
+    return result;
+}
+
+LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const String& version) {
+    LaunchResult result;
+    FirmwarePackage pkg = pkgIn;
+    if (!pkg.fid.length()) {
+        result.message = "Not a M5Burner entry";
+        return result;
+    }
+    if (WiFi.status() != WL_CONNECTED) {
+        result.message = "WiFi required";
+        return result;
+    }
+    if (!catalog_.ensureStorage()) {
+        result.message = "Insert SD to save app copy";
+        return result;
+    }
+    if (!burner::enrichPackageFromBurner(pkg)) {
+        result.message = "Version info failed";
+        log::info("burner_enrich_fail", pkg.name);
+        return result;
+    }
+
+    burner::BurnerInstallPlan plan;
+    const String pickVersion = version.length() ? version : pkg.version;
+    if (!burner::buildInstallPlan(pkg.fid, pickVersion == "burner" ? "" : pickVersion, plan)) {
+        result.message = "Install info failed";
+        log::info("burner_plan_fail", pkg.name);
+        return result;
+    }
+    if (plan.requiresExtraPartitions) {
+        result.message = "SPIFFS/FAT not supported";
+        return result;
+    }
+
+    const String slug = pkg.slug.length() ? pkg.slug : vfs::slugFromName(pkg.name);
+    const String safeBin = security::sanitizeBinFilename(pkg.binFile);
+    String sdPath;
+    if (safeBin.length() && vfs::ensureAppDirs(slug)) {
+        sdPath = catalog_.binPathForPackage(pkg);
+    }
+
+    const burner::BurnerFlashResult flash = burner::flashAppToOta(plan, sdPath);
+    result.ok = flash.ok;
+    result.message = flash.message;
+    if (flash.ok) catalog_.scanInstalled();
     return result;
 }
 

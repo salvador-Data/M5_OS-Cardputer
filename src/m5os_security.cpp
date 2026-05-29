@@ -23,6 +23,10 @@ bool isAllowedHostPath(const String& host, const String& path) {
     if (host == "hackerplanet.dev" || host == "www.hackerplanet.dev") return true;
     if (host == "github.com") return path.startsWith("/salvador-Data/");
     if (host == "raw.githubusercontent.com") return path.startsWith("/salvador-Data/");
+    if (host == "api.launcherhub.net") {
+        return path.startsWith("/firmwares") || path.startsWith("/download");
+    }
+    if (host == "m5burner-cdn.m5stack.com") return path.startsWith("/firmware/");
     return false;
 }
 
@@ -123,6 +127,34 @@ bool sha256Equal(const String& expected, const String& actual) {
     uint8_t diff = 0;
     for (int i = 0; i < 64; ++i) diff |= static_cast<uint8_t>(a.charAt(i) ^ b.charAt(i));
     return diff == 0;
+}
+
+String normalizeBurnerFid(const String& raw) {
+    String fid = raw;
+    fid.trim();
+    fid.toLowerCase();
+    if (fid.length() != 32) return "";
+    for (unsigned i = 0; i < fid.length(); ++i) {
+        const char c = fid.charAt(i);
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return "";
+    }
+    return fid;
+}
+
+String sanitizeBurnerFile(const String& raw) {
+    String file = raw;
+    file.trim();
+    if (!file.length()) return "";
+    if (file.startsWith("https://")) {
+        return isAllowedHttpsUrl(file) ? file : "";
+    }
+    if (file.indexOf("..") >= 0 || file.indexOf('/') >= 0 || file.indexOf('\\') >= 0) return "";
+    if (!file.endsWith(".bin")) return "";
+    for (unsigned i = 0; i < file.length(); ++i) {
+        if (!isSafeFilenameChar(file.charAt(i))) return "";
+    }
+    if (file.length() > 96) return "";
+    return file;
 }
 
 }  // namespace m5os::security

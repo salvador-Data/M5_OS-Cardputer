@@ -27,7 +27,6 @@ void setup() {
     m5os::begin();
     m5os::power::begin();
 
-    // Mount SD before boot splash (FSPI/SPI2 — display uses SPI3 via lgfx).
     const bool sdOk = gCatalog.ensureStorage();
     m5os::ui::bootIntroBegin();
 
