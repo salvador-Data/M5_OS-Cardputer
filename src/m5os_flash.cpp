@@ -136,92 +136,6 @@ int otaIndexFromSelectEntry(const esp_ota_select_entry_t& entry, uint8_t otaAppC
 
 
 
-bool markPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t targetState) {
-
-    if (!staged) return false;
-
-
-
-    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
-
-    if (esp_ota_get_state_partition(staged, &state) == ESP_OK && state == targetState) {
-
-        return true;
-
-    }
-
-
-
-    const esp_partition_t* otadata =
-
-        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
-
-    if (!otadata) return false;
-
-
-
-    constexpr size_t kSectorSize = 4096;
-
-    esp_ota_select_entry_t entries[2]{};
-
-    if (esp_partition_read(otadata, 0, &entries[0], sizeof(entries[0])) != ESP_OK) return false;
-
-    if (esp_partition_read(otadata, kSectorSize, &entries[1], sizeof(entries[1])) != ESP_OK) {
-
-        return false;
-
-    }
-
-
-
-    const uint8_t otaAppCount = countOtaAppPartitions();
-
-    const int stagedIndex = static_cast<int>(staged->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0);
-
-    bool updated = false;
-
-
-
-    for (int i = 0; i < 2; ++i) {
-
-        if (!bootloader_common_ota_select_valid(&entries[i])) continue;
-
-        if (otaIndexFromSelectEntry(entries[i], otaAppCount) != stagedIndex) continue;
-
-        entries[i].ota_state = targetState;
-
-        entries[i].crc = bootloader_common_ota_select_crc(&entries[i]);
-
-        if (esp_partition_erase_range(otadata, i * kSectorSize, kSectorSize) != ESP_OK) continue;
-
-        if (esp_partition_write(otadata, i * kSectorSize, &entries[i], sizeof(entries[i])) !=
-
-            ESP_OK) {
-
-            continue;
-
-        }
-
-        updated = true;
-
-    }
-
-
-
-    if (updated) {
-
-        log::info("m5os_stage_ota_state",
-
-                  String(staged->label) + ":" + String(static_cast<int>(targetState)));
-
-    }
-
-    return updated;
-
-}
-
-
-
 void noteLaunchFail(const char* tag) {
 
     gLaunchHandoffFailed = true;
@@ -415,6 +329,92 @@ size_t maxOtaAppBytes() {
     if (part != nullptr && part->size > 0) return part->size;
 
     return kMaxAppBinBytes;
+
+}
+
+
+
+bool markPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t targetState) {
+
+    if (!staged) return false;
+
+
+
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+
+    if (esp_ota_get_state_partition(staged, &state) == ESP_OK && state == targetState) {
+
+        return true;
+
+    }
+
+
+
+    const esp_partition_t* otadata =
+
+        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
+
+    if (!otadata) return false;
+
+
+
+    constexpr size_t kSectorSize = 4096;
+
+    esp_ota_select_entry_t entries[2]{};
+
+    if (esp_partition_read(otadata, 0, &entries[0], sizeof(entries[0])) != ESP_OK) return false;
+
+    if (esp_partition_read(otadata, kSectorSize, &entries[1], sizeof(entries[1])) != ESP_OK) {
+
+        return false;
+
+    }
+
+
+
+    const uint8_t otaAppCount = countOtaAppPartitions();
+
+    const int stagedIndex = static_cast<int>(staged->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0);
+
+    bool updated = false;
+
+
+
+    for (int i = 0; i < 2; ++i) {
+
+        if (!bootloader_common_ota_select_valid(&entries[i])) continue;
+
+        if (otaIndexFromSelectEntry(entries[i], otaAppCount) != stagedIndex) continue;
+
+        entries[i].ota_state = targetState;
+
+        entries[i].crc = bootloader_common_ota_select_crc(&entries[i]);
+
+        if (esp_partition_erase_range(otadata, i * kSectorSize, kSectorSize) != ESP_OK) continue;
+
+        if (esp_partition_write(otadata, i * kSectorSize, &entries[i], sizeof(entries[i])) !=
+
+            ESP_OK) {
+
+            continue;
+
+        }
+
+        updated = true;
+
+    }
+
+
+
+    if (updated) {
+
+        log::info("m5os_stage_ota_state",
+
+                  String(staged->label) + ":" + String(static_cast<int>(targetState)));
+
+    }
+
+    return updated;
 
 }
 
