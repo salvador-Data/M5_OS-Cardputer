@@ -79,6 +79,9 @@ def test_recovery_helpers_declared():
         "resolveLaunchBootPartition",
         "stagingOtaPartition",
         "consumeLaunchFailDetail",
+        "isAppSessionActive",
+        "isSessionExitPending",
+        "isRunningHomePartition",
     ):
         assert sym in header
         assert sym in source

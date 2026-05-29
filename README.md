@@ -255,11 +255,13 @@ Shipped catalog entries link Hacker Planet apps:
 
 | Trigger | Result |
 |---------|--------|
-| **ESC/` at power-on** | `tryEarlyRecoveryBoot()` restores M5 OS home partition |
+| **Reset btn / SW reset while app loaded** | OTA rollback boots M5 OS → **Save files before exit?** (`y` / `n`) → home menu |
+| **Hold ESC/` or BtnA at M5 OS boot** | 2 s recovery splash → save prompt if a session was active |
+| **Cold power switch off/on** | `applyColdBootHomeRestore()` → M5 OS home (no save prompt) |
 | **Menu watchdog (30 s)** | TWDT timeout restores home boot and reboots |
 | **USB reflash** | PlatformIO or M5Burner flash M5 OS base to **COM13** |
 
-While a third-party app is running, M5 OS is not active. Hold **ESC/` at power-on** or reflash the launcher. App `.bin` files stay on SD.
+While a third-party app is running, **M5 OS code is not active** — arbitrary M5Burner bins cannot show an in-app ESC menu. To exit: press the **Cardputer reset button** (side) or power-cycle, then answer the save prompt when M5 OS boots. Apps that write saves to SD should use `/home/default/apps/<slug>/saves/` (prepared before launch).
 
 Menu -> **M5Burner / recovery** shows USB and on-device recovery steps.
 

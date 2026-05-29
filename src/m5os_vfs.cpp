@@ -276,7 +276,7 @@ bool ensureDirectory(const char* path, String* failReason) {
     return false;
 }
 
-bool ensureDirectoryChain(const char* path, String* failReason) {
+bool ensureDirectoryChainInner(const char* path, String* failReason) {
     const String normalized = normalizeVfsPath(path);
     if (!normalized.length() || normalized == "/") return true;
     if (!normalized.startsWith("/")) {
@@ -422,7 +422,16 @@ bool ensureAppDirs(const String& appSlug) {
     if (!slug.length()) return false;
     const String appDir = appDirFor(slug);
     const String dataDir = appDataDirFor(slug);
-    return ensureDirectoryChain(appDir.c_str(), nullptr) && ensureDirectoryChain(dataDir.c_str(), nullptr);
+    return ensureDirectoryChainInner(appDir.c_str(), nullptr) &&
+           ensureDirectoryChainInner(dataDir.c_str(), nullptr);
+}
+
+bool ensureAppSavesDir(const String& appSlug) {
+    const String slug = slugFromName(appSlug);
+    if (!slug.length()) return false;
+    if (!ensureAppDirs(slug)) return false;
+    const String savesDir = appDataDirFor(slug) + "/saves";
+    return ensureDirectoryChainInner(savesDir.c_str(), nullptr);
 }
 
 MountResult mountAndInit() {
@@ -491,6 +500,10 @@ MountResult mountAndInit() {
     g_lastMountError = "";
     log::info("vfs_ready");
     return result;
+}
+
+bool ensureDirectoryChain(const char* path, String* failReason) {
+    return ensureDirectoryChainInner(path, failReason);
 }
 
 }  // namespace m5os::vfs

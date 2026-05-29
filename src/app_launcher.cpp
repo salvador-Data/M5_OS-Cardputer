@@ -12,6 +12,8 @@
 
 #include "m5os_flash.h"
 
+#include "m5os_session.h"
+
 #include "m5os_vfs.h"
 
 #include "m5os_security.h"
@@ -386,6 +388,8 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
     } else {
         log::info("launch_checksum_user_skip", cacheKey);
     }
+
+    session::prepareLaunchSd(path, cacheKey, meta);
 
     beginLaunchSession();
 

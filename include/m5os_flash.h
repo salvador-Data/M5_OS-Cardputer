@@ -1,9 +1,15 @@
 #pragma once
 
+
+
 #include "m5os_config.h"
 
+
+
 #include <Arduino.h>
+
 #include <cstddef>
+
 #include <esp_partition.h>
 
 
@@ -28,9 +34,12 @@ bool saveHomeAppPartition();
 
 bool restoreBootToHome();
 
+/** True when the running OTA partition matches saved home_label. */
+bool isRunningHomePartition();
 
 
-/** True when BtnA / G0 held at call time (recovery gesture). */
+
+/** True when BtnA / G0 / ESC / ` held at call time (recovery gesture). */
 
 bool recoveryBootRequested();
 
@@ -38,7 +47,7 @@ bool recoveryBootRequested();
 
 /**
 
- * If recovery key held, restore home boot partition and restart into M5 OS.
+ * If recovery key held, show splash then flag session exit for save prompt.
 
  * Call immediately after m5os::begin().
 
@@ -46,38 +55,93 @@ bool recoveryBootRequested();
 
 void tryEarlyRecoveryBoot();
 
+
+
 /** On ESP_RST_POWERON only, point otadata at saved M5 OS home partition. */
+
 void applyColdBootHomeRestore();
 
+
+
 /** After panic/watchdog reset, point otadata at saved M5 OS home partition. */
+
 void applyCrashResetHomeRestore();
 
-/** NVS flag: skip shutdown home-restore while rebooting into staged app. */
+
+
+/** NVS flag: legacy handoff (kept for tests / shutdown hook). */
+
 void setLaunchPending(bool pending);
+
 bool isLaunchPending();
+
 void clearLaunchPending();
 
+
+
+/** NVS app_session_active — set when Load app reboots into app1. */
+
+bool isAppSessionActive();
+
+void setAppSessionActive(bool active);
+
+void clearAppSession();
+
+
+
+/** NVS sess_exit — user requested exit; prompt save on next M5 OS boot. */
+
+bool isSessionExitPending();
+
+void setSessionExitPending(bool pending);
+
+void clearSessionExitPending();
+
+
+
 /** Mark an intentional load-app restart (RAM + NVS) before OTA copy or reboot. */
+
 void beginLaunchSession();
+
 void cancelLaunchSession();
+
 bool launchSessionActive();
 
+
+
 /** Inactive OTA slot with a valid ESP image header (0xE9). */
+
 const esp_partition_t* resolveLaunchBootPartition();
 
+
+
 /** Phase-2: after SW reset with launch pending, point otadata at staged app and restart. */
+
 bool tryLaunchPendingHandoff();
 
+
+
 /** True once if the last boot handoff failed; clears the flag. */
+
 bool consumeLaunchHandoffFailure();
 
+
+
 /** Last launch/handoff failure tag (e.g. no_target, set_boot); empty if none. Cleared on read. */
+
 String consumeLaunchFailDetail();
 
+
+
 /** Save home, point otadata at staged app, single SW restart into app. */
+
 bool launchStagedAppSession();
 
+
+
 const esp_partition_t* stagingOtaPartition();
+
+
 
 }  // namespace m5os
 

@@ -84,4 +84,17 @@ void applyTheme() {
     tick();
 }
 
+void recoveryPulse() {
+    if (!gReady) begin();
+    if (!gReady) return;
+
+    const unsigned long now = millis();
+    const bool on = (now / 180) % 2 == 0;
+    if (on) {
+        M5.Led.setColor(0, 48, 24, 0);
+    } else {
+        M5.Led.setColor(0, 8, 4, 0);
+    }
+}
+
 }  // namespace m5os::stamp

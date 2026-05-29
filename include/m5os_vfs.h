@@ -66,4 +66,10 @@ String slugFromName(const String& name);
 /** Ensure app compartment + data dirs exist. */
 bool ensureAppDirs(const String& appSlug);
 
+/** Ensure /home/default/apps/<slug>/saves/ exists. */
+bool ensureAppSavesDir(const String& appSlug);
+
+/** Create a path and every missing parent (absolute VFS paths only). */
+bool ensureDirectoryChain(const char* path, String* failReason = nullptr);
+
 }  // namespace m5os::vfs
