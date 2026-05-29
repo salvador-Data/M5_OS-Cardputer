@@ -200,6 +200,33 @@ def test_live_m5launcher_install_manifest_roundtrip() -> None:
         assert len(response.read()) == 2
 
 
+def test_evil_cardputer_full_image_larger_than_sd_limit() -> None:
+    """Composite Fs can exceed kMaxAppBinBytes; app slice must still fit OTA."""
+    fid = "2128851a0c98a4c1d15ac1a327b49812"
+    version_list = _fetch_json(version_url(fid))
+    latest = version_list["versions"][0]
+    assert latest["Fs"] > MAX_APP_BIN_BYTES
+    assert latest["as"] <= MAX_OTA_APP1_BYTES
+    detail = _fetch_json(install_detail_url(fid, latest["version"]))
+    plan = build_install_plan(fid, latest["version"], detail=detail, version_list=version_list)
+    assert plan is not None
+    assert plan.app_size <= MAX_OTA_APP1_BYTES
+    assert plan.app_size == latest["as"]
+
+
+def test_download_url_accepts_encoded_file_param() -> None:
+    fid = M5LAUNCHER_FID
+    file_name = "61ae83f2814a8adf2442ef85a0a3d69b.bin"
+    encoded = resolve_download_url(fid, file_name)
+    assert "%3A" in encoded or "file=https" in encoded
+    req = urllib.request.Request(
+        encoded,
+        headers={"HWID": TEST_HWID, "Range": "bytes=65536-65537"},
+    )
+    with urllib.request.urlopen(req) as response:
+        assert response.status == 206
+
+
 def test_oversized_app_rejected() -> None:
     detail = {
         "fid": M5LAUNCHER_FID,

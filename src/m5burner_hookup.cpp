@@ -20,7 +20,9 @@ String httpGetPayload(const String& url) {
     }
     HTTPClient http;
     http.begin(url);
-    http.setTimeout(15000);
+    http.setTimeout(20000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.addHeader("Accept-Encoding", "identity");
     applyBurnerDownloadHeaders(http, url);
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {

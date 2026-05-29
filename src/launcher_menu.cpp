@@ -126,7 +126,8 @@ void LauncherMenu::showDownloadCatalog() {
         if (path.length()) body += "\nSaved to\n" + path;
         ui::showMessage("Installed", body, TFT_GREEN, 2200);
     } else {
-        String body = "Download failed";
+        String body = catalog_.lastDownloadError().length() ? catalog_.lastDownloadError()
+                                                            : String("Download failed");
         if (!vfs::isMounted()) body = "Insert SD to save";
         ui::showMessage("Error", body, TFT_RED);
     }

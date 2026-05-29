@@ -1,5 +1,6 @@
 #include "firmware_catalog.h"
 
+#include "burner_install.h"
 #include "m5burner_hookup.h"
 #include "m5os_config.h"
 #include "m5os_security.h"
@@ -15,6 +16,16 @@
 namespace m5os {
 
 namespace {
+
+constexpr uint32_t kDirectDownloadTimeoutMs = 60000;
+constexpr uint8_t kDirectDownloadAttempts = 3;
+
+String formatDirectDownloadError(const char* stage, int code) {
+    String msg = stage;
+    if (code > 0) msg += " HTTP " + String(code);
+    else if (code < 0) msg += " err " + String(code);
+    return msg;
+}
 
 String normalizeName(const String& name) {
     String out = name;
@@ -62,18 +73,27 @@ bool parseManifestPayload(const String& payload, std::vector<FirmwarePackage>& o
     return !out.empty();
 }
 
-String hashDownloadStreamWithLimit(WiFiClient* stream, File& out, size_t maxBytes) {
+String hashDownloadStreamWithLimit(WiFiClient* stream, File& out, size_t maxBytes, size_t expectedSize) {
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
     mbedtls_sha256_starts(&ctx, 0);
     uint8_t buffer[512];
     size_t total = 0;
-    while (stream->connected() || stream->available()) {
+    uint32_t idleMs = 0;
+    while (total < maxBytes) {
+        if (WiFi.status() != WL_CONNECTED) break;
         const size_t available = stream->available();
         if (!available) {
+            if (!stream->connected() && !stream->available()) {
+                if (expectedSize == 0 || total >= expectedSize) break;
+                break;
+            }
             delay(1);
+            idleMs += 1;
+            if (idleMs > kDirectDownloadTimeoutMs) break;
             continue;
         }
+        idleMs = 0;
         const int read = stream->readBytes(buffer, min(available, sizeof(buffer)));
         if (read <= 0) break;
         if (total + static_cast<size_t>(read) > maxBytes) {
@@ -83,6 +103,11 @@ String hashDownloadStreamWithLimit(WiFiClient* stream, File& out, size_t maxByte
         total += static_cast<size_t>(read);
         out.write(buffer, read);
         mbedtls_sha256_update(&ctx, buffer, static_cast<size_t>(read));
+        if (expectedSize > 0 && total >= expectedSize) break;
+    }
+    if (expectedSize > 0 && total != expectedSize) {
+        mbedtls_sha256_free(&ctx);
+        return "";
     }
     uint8_t digest[32];
     mbedtls_sha256_finish(&ctx, digest);
@@ -280,73 +305,127 @@ bool FirmwareCatalog::refreshFromSdManifest() {
 }
 
 bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkgIn) {
-    if (!vfs::isMounted() && !ensureStorage()) return false;
+    lastDownloadError_ = "";
+    if (!vfs::isMounted() && !ensureStorage()) {
+        lastDownloadError_ = "SD not mounted";
+        return false;
+    }
     FirmwarePackage pkg = pkgIn;
-    if (!pkg.url.length() && pkg.fid.length()) {
-        if (!burner::enrichPackageFromBurner(pkg)) {
-            log::info("burner_enrich_fail", pkg.name);
-            return false;
-        }
-    } else if (!pkg.url.length() && pkg.fid.length() && pkg.file.length()) {
-        pkg.url = burner::resolveDownloadUrl(pkg.fid, pkg.file);
-    }
-    if (WiFi.status() != WL_CONNECTED || !pkg.url.length()) return false;
-    if (!security::isAllowedHttpsUrl(pkg.url)) {
-        log::info("download_url_rejected", pkg.name);
-        return false;
-    }
-    if (pkg.size > kMaxAppBinBytes) {
-        log::info("download_size_rejected", pkg.name);
-        return false;
-    }
+    const String slug = pkg.slug.length() ? pkg.slug : vfs::slugFromName(pkg.name);
     const String safeBin = security::sanitizeBinFilename(pkg.binFile);
     if (!safeBin.length()) {
+        lastDownloadError_ = "Invalid bin filename";
         log::info("download_bin_rejected", pkg.name);
         return false;
     }
-    const String slug = pkg.slug.length() ? pkg.slug : vfs::slugFromName(pkg.name);
     if (!vfs::ensureAppDirs(slug)) {
+        lastDownloadError_ = "Cannot create app dir";
         log::info("download_dir_fail", pkg.name);
-        return false;
-    }
-    HTTPClient http;
-    http.begin(pkg.url);
-    http.setTimeout(20000);
-    burner::applyBurnerDownloadHeaders(http, pkg.url);
-    const int code = http.GET();
-    if (code != HTTP_CODE_OK) {
-        http.end();
-        log::info("download_http_fail", String(code));
-        return false;
-    }
-    const int contentLength = http.getSize();
-    if (contentLength > 0 && static_cast<size_t>(contentLength) > kMaxAppBinBytes) {
-        http.end();
-        log::info("download_size_rejected", pkg.name);
         return false;
     }
     const String path = String(vfs::appDirFor(slug)) + "/" + safeBin;
     if (!path.length()) {
-        http.end();
+        lastDownloadError_ = "Invalid save path";
         return false;
     }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        lastDownloadError_ = "WiFi required";
+        return false;
+    }
+
+    if (pkg.fid.length()) {
+        String version = pkg.version;
+        if (version == "burner" || !version.length()) version = "";
+        const burner::BurnerDownloadResult burned =
+            burner::downloadFidToSd(pkg.fid, version, path);
+        if (!burned.ok) {
+            lastDownloadError_ = burned.message.length() ? burned.message : "Download failed";
+            if (burned.stage.length()) lastDownloadError_ = burned.stage + ": " + lastDownloadError_;
+            log::info("burner_download_fail", pkg.name);
+            return false;
+        }
+        scanInstalled();
+        log::info("package_installed", pkg.name);
+        return SD.exists(path.c_str());
+    }
+
+    if (!pkg.url.length()) {
+        lastDownloadError_ = "Missing download URL";
+        return false;
+    }
+    if (!security::isAllowedHttpsUrl(pkg.url)) {
+        lastDownloadError_ = "URL blocked";
+        log::info("download_url_rejected", pkg.name);
+        return false;
+    }
+    if (pkg.size > kMaxAppBinBytes) {
+        lastDownloadError_ = "File too large";
+        log::info("download_size_rejected", pkg.name);
+        return false;
+    }
+
+    int httpCode = -1;
+    bool gotStream = false;
+    HTTPClient http;
+    for (uint8_t attempt = 0; attempt < kDirectDownloadAttempts; ++attempt) {
+        if (WiFi.status() != WL_CONNECTED) {
+            delay(400);
+            continue;
+        }
+        http.begin(pkg.url);
+        http.setTimeout(kDirectDownloadTimeoutMs);
+        http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+        http.addHeader("Accept-Encoding", "identity");
+        burner::applyBurnerDownloadHeaders(http, pkg.url);
+        httpCode = http.GET();
+        if (httpCode == HTTP_CODE_OK) {
+            gotStream = true;
+            break;
+        }
+        http.end();
+        delay(400 * (attempt + 1));
+    }
+    if (!gotStream) {
+        lastDownloadError_ = formatDirectDownloadError("Download HTTP", httpCode);
+        log::info("download_http_fail", String(httpCode));
+        return false;
+    }
+
+    const int contentLength = http.getSize();
+    if (contentLength > 0 && static_cast<size_t>(contentLength) > kMaxAppBinBytes) {
+        http.end();
+        lastDownloadError_ = "File too large";
+        log::info("download_size_rejected", pkg.name);
+        return false;
+    }
+
     File out = SD.open(path, FILE_WRITE);
     if (!out) {
         http.end();
+        lastDownloadError_ = "Cannot open SD file";
         return false;
     }
     WiFiClient* stream = http.getStreamPtr();
-    const String digest = hashDownloadStreamWithLimit(stream, out, kMaxAppBinBytes);
+    const size_t expectedSize =
+        contentLength > 0 ? static_cast<size_t>(contentLength) : (pkg.size > 0 ? pkg.size : 0);
+    const String digest = hashDownloadStreamWithLimit(stream, out, kMaxAppBinBytes, expectedSize);
     out.close();
     http.end();
     if (!digest.length()) {
         SD.remove(path.c_str());
+        if (WiFi.status() != WL_CONNECTED) {
+            lastDownloadError_ = "WiFi lost during download";
+        } else {
+            lastDownloadError_ = "Download incomplete";
+        }
         log::info("download_hash_fail", pkg.name);
         return false;
     }
     if (pkg.sha256.length()) {
         if (!security::sha256Equal(pkg.sha256, digest)) {
             SD.remove(path.c_str());
+            lastDownloadError_ = "SHA256 mismatch";
             log::info("download_checksum_fail", pkg.name);
             return false;
         }

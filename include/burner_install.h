@@ -41,6 +41,14 @@ struct BurnerFlashResult {
     bool savedExtraToSd = false;
 };
 
+/** Result for SD-only app slice download (Download from catalog). */
+struct BurnerDownloadResult {
+    bool ok = false;
+    String message;
+    int httpCode = 0;
+    String stage;
+};
+
 /** List published versions for a LauncherHub firmware id. */
 bool fetchVersionList(const String& fid, std::vector<BurnerVersionInfo>& out);
 
@@ -53,5 +61,11 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
  * SPIFFS/FAT slices (copy_size > 0) are saved alongside the app on SD when sdPath is set.
  */
 BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdPath = "");
+
+/** Download app slice (+ optional SPIFFS/FAT extras) from a resolved install plan. */
+BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const String& sdPath);
+
+/** Resolve install plan and download app slice to sdPath (LauncherHub catalog download). */
+BurnerDownloadResult downloadFidToSd(const String& fid, const String& version, const String& sdPath);
 
 }  // namespace m5os::burner

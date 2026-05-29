@@ -18,19 +18,56 @@ namespace m5os::burner {
 
 namespace {
 
+constexpr uint32_t kCatalogHttpTimeoutMs = 20000;
+constexpr uint32_t kDownloadHttpTimeoutMs = 60000;
+constexpr uint8_t kHttpMaxAttempts = 3;
+
+String formatHttpStageError(const char* stage, int code) {
+    String msg = stage;
+    if (code > 0) msg += " HTTP " + String(code);
+    else if (code < 0) msg += " err " + String(code);
+    return msg;
+}
+
+struct HttpGetResult {
+    int code = -1;
+    bool ok = false;
+};
+
+HttpGetResult httpGetWithRetry(HTTPClient& http, const String& url, uint32_t timeoutMs,
+                               const String& rangeHeader = "") {
+    HttpGetResult result;
+    for (uint8_t attempt = 0; attempt < kHttpMaxAttempts; ++attempt) {
+        if (WiFi.status() != WL_CONNECTED) {
+            delay(400);
+            continue;
+        }
+        http.begin(url);
+        http.setTimeout(timeoutMs);
+        http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+        http.addHeader("Accept-Encoding", "identity");
+        applyBurnerDownloadHeaders(http, url);
+        if (rangeHeader.length()) http.addHeader("Range", rangeHeader);
+        result.code = http.GET();
+        if (result.code == HTTP_CODE_OK || result.code == HTTP_CODE_PARTIAL_CONTENT) {
+            result.ok = true;
+            return result;
+        }
+        http.end();
+        delay(400 * (attempt + 1));
+    }
+    return result;
+}
+
 String httpGetPayload(const String& url) {
     if (!security::isAllowedHttpsUrl(url)) {
         log::info("burner_url_rejected");
         return "";
     }
     HTTPClient http;
-    http.begin(url);
-    http.setTimeout(20000);
-    applyBurnerDownloadHeaders(http, url);
-    const int code = http.GET();
-    if (code != HTTP_CODE_OK) {
-        http.end();
-        log::info("burner_http_fail", String(code));
+    const HttpGetResult result = httpGetWithRetry(http, url, kCatalogHttpTimeoutMs);
+    if (!result.ok) {
+        log::info("burner_http_fail", String(result.code));
         return "";
     }
     const String payload = http.getString();
@@ -127,16 +164,16 @@ size_t parseContentRangeTotal(const String& contentRange) {
     return static_cast<size_t>(contentRange.substring(slash + 1).toInt());
 }
 
-bool probeRemoteSize(const String& url, size_t& totalSize) {
+bool probeRemoteSize(const String& url, size_t& totalSize, int* httpCodeOut = nullptr) {
     HTTPClient http;
-    http.begin(url);
-    http.setTimeout(15000);
-    applyBurnerDownloadHeaders(http, url);
-    http.addHeader("Range", "bytes=0-0");
-    const int code = http.GET();
+    const HttpGetResult result = httpGetWithRetry(http, url, kCatalogHttpTimeoutMs, "bytes=0-0");
+    if (httpCodeOut) *httpCodeOut = result.code;
+    if (!result.ok || result.code != HTTP_CODE_PARTIAL_CONTENT) {
+        http.end();
+        return false;
+    }
     const String contentRange = http.header("Content-Range");
     http.end();
-    if (code != HTTP_CODE_PARTIAL_CONTENT) return false;
     totalSize = parseContentRangeTotal(contentRange);
     return totalSize > 0;
 }
@@ -167,39 +204,53 @@ bool writeFlashChunk(RangeFlashContext& ctx, const uint8_t* data, size_t len) {
     return true;
 }
 
-bool streamRangeToFile(const String& url, uint32_t offset, size_t imageSize, File& out,
-                       const char* progressLabel) {
-    if (!security::isAllowedHttpsUrl(url)) return false;
-    if (imageSize == 0) return false;
+struct RangeStreamResult {
+    bool ok = false;
+    int httpCode = 0;
+    size_t written = 0;
+};
+
+RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t imageSize, File& out,
+                                    const char* progressLabel) {
+    RangeStreamResult result;
+    if (!security::isAllowedHttpsUrl(url)) return result;
+    if (imageSize == 0) return result;
+
+    const uint32_t endByte = offset + static_cast<uint32_t>(imageSize) - 1;
+    const String rangeHeader = "bytes=" + String(offset) + "-" + String(endByte);
 
     HTTPClient http;
-    http.begin(url);
-    http.setTimeout(30000);
-    applyBurnerDownloadHeaders(http, url);
-    const uint32_t endByte = offset + static_cast<uint32_t>(imageSize) - 1;
-    http.addHeader("Range", "bytes=" + String(offset) + "-" + String(endByte));
-    const int code = http.GET();
-    if (code != HTTP_CODE_OK && code != HTTP_CODE_PARTIAL_CONTENT) {
+    const HttpGetResult httpResult =
+        httpGetWithRetry(http, url, kDownloadHttpTimeoutMs, rangeHeader);
+    result.httpCode = httpResult.code;
+    if (!httpResult.ok) {
         http.end();
-        log::info("burner_range_fail", String(code));
-        return false;
+        log::info("burner_range_fail", String(httpResult.code));
+        return result;
     }
 
     WiFiClient* stream = http.getStreamPtr();
     size_t written = 0;
     uint8_t buffer[512];
-    while (written < imageSize && (stream->connected() || stream->available())) {
+    uint32_t idleMs = 0;
+    while (written < imageSize) {
+        if (WiFi.status() != WL_CONNECTED) break;
         const size_t avail = stream->available();
         if (!avail) {
+            if (!stream->connected() && !stream->available()) break;
             delay(1);
+            idleMs += 1;
+            if (idleMs > kDownloadHttpTimeoutMs) break;
             continue;
         }
+        idleMs = 0;
         const size_t want = min(avail, min(sizeof(buffer), imageSize - written));
         const int read = stream->readBytes(buffer, want);
         if (read <= 0) break;
         if (out.write(buffer, static_cast<size_t>(read)) != static_cast<size_t>(read)) {
             http.end();
-            return false;
+            result.written = written;
+            return result;
         }
         written += static_cast<size_t>(read);
         if (progressLabel && (written % 8192 == 0 || written == imageSize)) {
@@ -210,23 +261,27 @@ bool streamRangeToFile(const String& url, uint32_t offset, size_t imageSize, Fil
         }
     }
     http.end();
-    return written == imageSize;
+    result.written = written;
+    result.ok = written == imageSize;
+    if (!result.ok) log::info("burner_incomplete", String(written));
+    return result;
 }
 
-bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut) {
+bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut,
+                      int* httpCodeOut = nullptr) {
     if (!security::isAllowedHttpsUrl(url)) return false;
     if (imageSize == 0 || imageSize > maxOtaAppBytes()) return false;
 
-    HTTPClient http;
-    http.begin(url);
-    http.setTimeout(30000);
-    applyBurnerDownloadHeaders(http, url);
     const uint32_t endByte = offset + static_cast<uint32_t>(imageSize) - 1;
-    http.addHeader("Range", "bytes=" + String(offset) + "-" + String(endByte));
-    const int code = http.GET();
-    if (code != HTTP_CODE_OK && code != HTTP_CODE_PARTIAL_CONTENT) {
+    const String rangeHeader = "bytes=" + String(offset) + "-" + String(endByte);
+
+    HTTPClient http;
+    const HttpGetResult httpResult =
+        httpGetWithRetry(http, url, kDownloadHttpTimeoutMs, rangeHeader);
+    if (httpCodeOut) *httpCodeOut = httpResult.code;
+    if (!httpResult.ok) {
         http.end();
-        log::info("burner_range_fail", String(code));
+        log::info("burner_range_fail", String(httpResult.code));
         return false;
     }
 
@@ -236,12 +291,18 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
     ctx.sdOut = sdOut;
 
     uint8_t buffer[512];
-    while (ctx.written < imageSize && (stream->connected() || stream->available())) {
+    uint32_t idleMs = 0;
+    while (ctx.written < imageSize) {
+        if (WiFi.status() != WL_CONNECTED) break;
         const size_t avail = stream->available();
         if (!avail) {
+            if (!stream->connected() && !stream->available()) break;
             delay(1);
+            idleMs += 1;
+            if (idleMs > kDownloadHttpTimeoutMs) break;
             continue;
         }
+        idleMs = 0;
         const size_t want = min(avail, min(sizeof(buffer), imageSize - ctx.written));
         const int read = stream->readBytes(buffer, want);
         if (read <= 0) break;
@@ -414,12 +475,20 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
     }
 
     const uint32_t offset = plan.noBootloader ? 0 : plan.appOffset;
-    const bool ok = streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr);
+    int flashHttpCode = 0;
+    const bool ok = streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr,
+                                     &flashHttpCode);
     if (sdOut) sdOut.close();
 
     if (!ok) {
         if (sdPath.length()) SD.remove(sdPath.c_str());
-        result.message = "Flash failed — launcher intact";
+        if (WiFi.status() != WL_CONNECTED) {
+            result.message = "WiFi lost during flash";
+        } else if (flashHttpCode > 0) {
+            result.message = formatHttpStageError("Flash HTTP", flashHttpCode);
+        } else {
+            result.message = "Flash failed — launcher intact";
+        }
         return result;
     }
 
@@ -437,10 +506,11 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
             log::info("burner_extra_sd_fail", extraPath);
             continue;
         }
-        const bool saved = streamRangeToFile(plan.downloadUrl, slice.sourceOffset, slice.copySize,
-                                             extraOut, "Saving assets");
+        const RangeStreamResult saved =
+            streamRangeToFile(plan.downloadUrl, slice.sourceOffset, slice.copySize, extraOut,
+                              "Saving assets");
         extraOut.close();
-        if (!saved) {
+        if (!saved.ok) {
             SD.remove(extraPath.c_str());
             log::info("burner_extra_incomplete", extraPath);
             continue;
@@ -462,6 +532,113 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
     delay(300);
     esp_restart();
     return result;
+}
+
+BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const String& sdPath) {
+    BurnerDownloadResult result;
+    if (WiFi.status() != WL_CONNECTED) {
+        result.stage = "WiFi";
+        result.message = "WiFi required";
+        return result;
+    }
+    if (!plan.downloadUrl.length() || plan.appSize == 0) {
+        result.stage = "Plan";
+        result.message = "Invalid install plan";
+        return result;
+    }
+    if (plan.appSize > maxOtaAppBytes()) {
+        result.stage = "Plan";
+        result.message = "App too large for OTA slot";
+        return result;
+    }
+    if (!sdPath.length()) {
+        result.stage = "SD";
+        result.message = "Missing SD path";
+        return result;
+    }
+
+    File out = SD.open(sdPath.c_str(), FILE_WRITE);
+    if (!out) {
+        result.stage = "SD";
+        result.message = "Cannot open SD path";
+        log::info("burner_sd_open_fail", sdPath);
+        return result;
+    }
+
+    ui::drawHeader("Downloading");
+    m5os::lcd().setCursor(4, 28);
+    m5os::lcd().println(plan.version.length() ? plan.version : plan.file);
+    m5os::lcd().setCursor(4, 44);
+    m5os::lcd().printf("App %u bytes", static_cast<unsigned>(plan.appSize));
+
+    const uint32_t offset = plan.noBootloader ? 0 : plan.appOffset;
+    const RangeStreamResult streamed =
+        streamRangeToFile(plan.downloadUrl, offset, plan.appSize, out, "Downloading");
+    out.close();
+    result.httpCode = streamed.httpCode;
+    result.stage = "Download";
+
+    if (!streamed.ok) {
+        SD.remove(sdPath.c_str());
+        if (WiFi.status() != WL_CONNECTED) {
+            result.message = "WiFi lost during download";
+        } else if (streamed.httpCode > 0) {
+            result.message = formatHttpStageError("Download HTTP", streamed.httpCode);
+        } else if (streamed.written > 0) {
+            result.message = "Download incomplete " + String(streamed.written) + "/" +
+                             String(plan.appSize);
+        } else {
+            result.message = "Download failed";
+        }
+        return result;
+    }
+
+    for (const auto& slice : plan.dataSlices) {
+        if (slice.copySize == 0) continue;
+        const String extraPath = sdExtraPathFromApp(sdPath, slice);
+        if (!extraPath.length()) continue;
+
+        ui::drawHeader("Saving assets");
+        m5os::lcd().setCursor(4, 28);
+        m5os::lcd().println(slice.subtype + (slice.label.length() ? ":" + slice.label : ""));
+
+        File extraOut = SD.open(extraPath.c_str(), FILE_WRITE);
+        if (!extraOut) {
+            log::info("burner_extra_sd_fail", extraPath);
+            continue;
+        }
+        const RangeStreamResult saved =
+            streamRangeToFile(plan.downloadUrl, slice.sourceOffset, slice.copySize, extraOut,
+                              "Saving assets");
+        extraOut.close();
+        if (!saved.ok) {
+            SD.remove(extraPath.c_str());
+            log::info("burner_extra_incomplete", extraPath);
+            continue;
+        }
+        log::info("burner_extra_saved", extraPath);
+    }
+
+    result.ok = true;
+    result.message = "Saved to SD";
+    log::info("burner_download_ok", plan.version);
+    return result;
+}
+
+BurnerDownloadResult downloadFidToSd(const String& fid, const String& version,
+                                       const String& sdPath) {
+    BurnerDownloadResult result;
+    BurnerInstallPlan plan;
+    if (!buildInstallPlan(fid, version, plan)) {
+        result.stage = "Plan";
+        if (plan.appSize > maxOtaAppBytes()) {
+            result.message = "App too large for OTA slot";
+        } else {
+            result.message = "Install info failed";
+        }
+        return result;
+    }
+    return downloadPlanToSd(plan, sdPath);
 }
 
 }  // namespace m5os::burner

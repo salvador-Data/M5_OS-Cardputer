@@ -27,6 +27,8 @@ public:
     bool refreshFromBurnerHub(uint8_t page = 1);
     bool refreshFromSdManifest();
     bool downloadPackage(const FirmwarePackage& pkg);
+    /** User-facing detail from the last failed downloadPackage call. */
+    const String& lastDownloadError() const { return lastDownloadError_; }
     const std::vector<FirmwarePackage>& installed() const { return installed_; }
     const std::vector<FirmwarePackage>& available() const { return available_; }
     FirmwarePackage* findInstalledByName(const String& name);
@@ -42,6 +44,7 @@ private:
 
     std::vector<FirmwarePackage> installed_;
     std::vector<FirmwarePackage> available_;
+    String lastDownloadError_;
 };
 
 }  // namespace m5os
