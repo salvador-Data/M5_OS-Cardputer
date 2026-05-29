@@ -63,7 +63,14 @@ build_flags =
 
 ## Launch workflow
 
-1. Flash **M5 OS** (`pio run -e m5stack-cardputer -t upload`) or via [M5Burner](https://docs.m5stack.com/en/uiflow/m5burner/intro) (Cardputer target).
+1. Flash **M5 OS** from the **repo root** (where `platformio.ini` lives — not a `platformio/` subfolder):
+
+   ```powershell
+   cd C:\Users\Owner\Projects\M5_OS-Cardputer
+   & "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -t upload
+   ```
+
+   Or via [M5Burner](https://docs.m5stack.com/en/uiflow/m5burner/intro) (Cardputer target).
 2. Insert SD, **Refresh manifest** (Wi-Fi or `/manifest.json`).
 3. **Download from catalog** or copy `.bin` files to `/firmware/`.
 4. **Launch installed app** — M5 OS flashes the selected `.bin` and reboots into that app.

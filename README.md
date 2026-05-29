@@ -81,14 +81,62 @@ Longer background → **[docs/ABOUT.md](docs/ABOUT.md)**
 
 ## Flash (quick)
 
-### PlatformIO (recommended)
+**Repo layout:** `platformio.ini` and `src/` live at the **repository root**. There is **no** `platformio/` subfolder (unlike [BLE-Bot-Cardputer](https://github.com/salvador-Data/BLE-Bot-Cardputer) or [Remote-Possibility](https://github.com/salvador-Data/Remote-Possibility), which use `platformio/platformio.ini`).
 
-```bash
-git clone https://github.com/salvador-Data/M5_OS-Cardputer.git
-cd M5_OS-Cardputer
-pip install platformio
-pio run -e m5stack-cardputer -t upload
+Clone as a **sibling** of `cyberThreatGotchi` — not inside it:
+
+```text
+C:\Users\Owner\Projects\
+├── cyberThreatGotchi\          ← CTG repo (separate)
+└── M5_OS-Cardputer\            ← clone here
+    ├── platformio.ini          ← PlatformIO project root
+    ├── src\                    ← firmware source
+    ├── include\
+    └── data\
 ```
+
+### PlatformIO CLI (PowerShell)
+
+If you already cloned and your prompt shows `...\M5_OS-Cardputer>`, you are at the project root — **do not** `cd platformio` or `cd M5_OS-Cardputer` again.
+
+Fresh clone + build:
+
+```powershell
+cd C:\Users\Owner\Projects
+```
+
+```powershell
+git clone https://github.com/salvador-Data/M5_OS-Cardputer.git
+```
+
+```powershell
+cd M5_OS-Cardputer
+```
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer
+```
+
+Flash over USB (Cardputer connected, hold reset if needed):
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -t upload
+```
+
+Serial monitor:
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" device monitor -b 115200
+```
+
+If `pio` is on your PATH (PlatformIO Core installed globally), you can use `pio run -e m5stack-cardputer` instead of the full path above.
+
+### VS Code + PlatformIO extension
+
+1. **File → Open Folder…** → select `C:\Users\Owner\Projects\M5_OS-Cardputer` (the folder that contains `platformio.ini`).
+2. Wait for PlatformIO to finish indexing libraries.
+3. Bottom toolbar: pick environment **`m5stack-cardputer`**.
+4. Click **Build** (checkmark) or **Upload** (arrow). No `cd` required.
 
 ### M5Burner
 
