@@ -12,29 +12,18 @@ namespace m5os::vfs {
 namespace {
 
 bool g_sdMounted = false;
+bool g_spiBegun = false;
 String g_lastMountError;
+String g_lastMountDetail;
 
-// Dedicated FSPI (SPI2) for microSD — never touch global SPI or SPI3 (display / lgfx).
-SPIClass g_sdSpi(FSPI);
-bool g_sdSpiReady = false;
-
-void initSdSpiBus() {
+// Match M5Cardputer examples/Basic/sdcard/sdcard.ino — global SPI, bus stays up after begin().
+void ensureSdSpiBus() {
     pinMode(kSdCsPin, OUTPUT);
     digitalWrite(kSdCsPin, HIGH);
-    if (!g_sdSpiReady) {
-        g_sdSpi.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
-        g_sdSpiReady = true;
+    if (!g_spiBegun) {
+        SPI.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
+        g_spiBegun = true;
     }
-}
-
-void resetSdSpiBus() {
-    SD.end();
-    if (g_sdSpiReady) {
-        g_sdSpi.end();
-        g_sdSpiReady = false;
-    }
-    delay(50);
-    initSdSpiBus();
 }
 
 const char* cardTypeLabel(uint8_t cardType) {
@@ -51,8 +40,8 @@ const char* cardTypeLabel(uint8_t cardType) {
 }
 
 bool trySdMountOnce(uint32_t hz, String* failDetail) {
-    initSdSpiBus();
-    if (SD.begin(kSdCsPin, g_sdSpi, hz)) {
+    ensureSdSpiBus();
+    if (SD.begin(kSdCsPin, SPI, hz)) {
         const uint8_t cardType = SD.cardType();
         if (cardType == CARD_NONE) {
             SD.end();
@@ -68,19 +57,16 @@ bool trySdMountOnce(uint32_t hz, String* failDetail) {
     return false;
 }
 
-String g_lastMountDetail;
-
 bool trySdMount() {
     const uint32_t speeds[] = {25000000, 10000000, 4000000, 1000000};
     constexpr uint8_t kRounds = 6;
     String lastDetail;
 
-    resetSdSpiBus();
+    ensureSdSpiBus();
+    delay(100);
+
     for (uint8_t round = 0; round < kRounds; ++round) {
-        if (round > 0) {
-            delay(200);
-            resetSdSpiBus();
-        }
+        if (round > 0) delay(200);
         for (uint32_t hz : speeds) {
             if (trySdMountOnce(hz, &lastDetail)) {
                 g_lastMountDetail = "";
@@ -210,15 +196,16 @@ bool ensureAppDirs(const String& appSlug) {
 
 MountResult mountAndInit() {
     MountResult result;
+    if (g_sdMounted && SD.cardType() != CARD_NONE) {
+        result.ok = true;
+        result.message = "SD mounted";
+        return result;
+    }
     g_sdMounted = false;
     g_lastMountError = "";
     SD.end();
-    if (g_sdSpiReady) {
-        g_sdSpi.end();
-        g_sdSpiReady = false;
-    }
-    // Let microSD power stabilize after M5Cardputer.begin() (do not SPI.end() — breaks display).
     delay(600);
+
     if (!trySdMount()) {
         result.message = mountFailureMessage();
         g_lastMountError = result.message;
@@ -236,6 +223,7 @@ MountResult mountAndInit() {
             g_lastMountError = result.message;
             log::info("vfs_mkdir_fail", dir);
             SD.end();
+            g_sdMounted = false;
             return result;
         }
     }
