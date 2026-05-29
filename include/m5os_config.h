@@ -25,6 +25,13 @@ static const char* kLauncherMarkerPath = "/system/M5OS_CARDPUTER.txt";
 
 static const char* kDefaultManifestUrl = M5OS_MANIFEST_URL;
 
+#ifndef M5OS_UTMS_PACK_URL
+#define M5OS_UTMS_PACK_URL \
+    "https://raw.githubusercontent.com/salvador-Data/M5_OS-Cardputer/main/data/threat_pack.example.json"
+#endif
+
+static const char* kDefaultUtmsPackUrl = M5OS_UTMS_PACK_URL;
+
 static const char* kAppRemotePossibility = "remote_possibility";
 static const char* kAppBleBot = "ble_bot";
 

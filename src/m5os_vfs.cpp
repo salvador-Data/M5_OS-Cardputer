@@ -470,8 +470,9 @@ MountResult mountAndInit() {
 
     const char* tree[] = {kSystemDir,       kSystemBinDir,    kAppsDir,
                           kHomeDir,         kHomeDefaultDir,  kHomeAppsDir,
-                          kHomeCacheDir,    kSavesDir,        kTmpDir,
-                          kVarLogDir,       kLegacyFirmwareDir};
+                          kHomeCacheDir,    kSavesDir,        kUtmsDir,
+                          kQuarantineDir,   kTmpDir,          kVarLogDir,
+                          kLegacyFirmwareDir};
     for (const char* dir : tree) {
         vfsStepError = "";
         if (!ensureDirectoryChain(dir, &vfsStepError)) {

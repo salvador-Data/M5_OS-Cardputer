@@ -1,6 +1,7 @@
 #include "m5os_settings.h"
 
 #include "m5os_config.h"
+#include "m5os_security.h"
 #include "m5os_vfs.h"
 #include "serial_log.h"
 
@@ -15,6 +16,8 @@ constexpr int kSettingsVersion = 1;
 int gThemePreset = kDefaultThemePreset;
 String gWifiSsid;
 String gWifiPass;
+String gUtmsPackUrl = kDefaultUtmsPackUrl;
+bool gUtmsAutoCheck = false;
 
 bool writeSettingsDoc(JsonDocument& doc) {
     if (!vfs::isMounted()) {
@@ -94,6 +97,13 @@ bool load() {
     gWifiSsid = doc["wifi"]["ssid"] | "";
     gWifiPass = doc["wifi"]["pass"] | "";
     gWifiSsid.trim();
+    gUtmsAutoCheck = doc["utms"]["auto_check"] | false;
+    const String packUrl = doc["utms"]["pack_url"] | "";
+    if (packUrl.length() && security::isAllowedHttpsUrl(packUrl)) {
+        gUtmsPackUrl = packUrl;
+    } else {
+        gUtmsPackUrl = kDefaultUtmsPackUrl;
+    }
     log::info("settings_loaded", String(gThemePreset));
     return true;
 }
@@ -106,6 +116,8 @@ bool saveTheme(int preset) {
     readSettingsFile(doc);
     doc["version"] = kSettingsVersion;
     doc["theme"] = preset;
+    doc["utms"]["auto_check"] = gUtmsAutoCheck;
+    doc["utms"]["pack_url"] = gUtmsPackUrl;
     if (gWifiSsid.length()) {
         doc["wifi"]["ssid"] = gWifiSsid;
         doc["wifi"]["pass"] = gWifiPass;
@@ -122,6 +134,8 @@ bool saveWifi(const char* ssid, const char* pass) {
     readSettingsFile(doc);
     doc["version"] = kSettingsVersion;
     doc["theme"] = gThemePreset;
+    doc["utms"]["auto_check"] = gUtmsAutoCheck;
+    doc["utms"]["pack_url"] = gUtmsPackUrl;
     doc["wifi"]["ssid"] = gWifiSsid;
     doc["wifi"]["pass"] = gWifiPass;
     return writeSettingsDoc(doc);
@@ -181,5 +195,42 @@ const char* themePresetName(int preset) {
 String savedWifiSsid() { return gWifiSsid; }
 
 String savedWifiPass() { return gWifiPass; }
+
+String utmsPackUrl() { return gUtmsPackUrl.length() ? gUtmsPackUrl : String(kDefaultUtmsPackUrl); }
+
+bool utmsAutoCheckOnBoot() { return gUtmsAutoCheck; }
+
+bool saveUtmsAutoCheck(bool enabled) {
+    gUtmsAutoCheck = enabled;
+    if (!ensureSdMounted()) return false;
+    JsonDocument doc;
+    readSettingsFile(doc);
+    doc["version"] = kSettingsVersion;
+    doc["theme"] = gThemePreset;
+    doc["utms"]["auto_check"] = enabled;
+    doc["utms"]["pack_url"] = gUtmsPackUrl;
+    if (gWifiSsid.length()) {
+        doc["wifi"]["ssid"] = gWifiSsid;
+        doc["wifi"]["pass"] = gWifiPass;
+    }
+    return writeSettingsDoc(doc);
+}
+
+bool saveUtmsPackUrl(const char* url) {
+    if (!url || !url[0] || !security::isAllowedHttpsUrl(url)) return false;
+    gUtmsPackUrl = url;
+    if (!ensureSdMounted()) return false;
+    JsonDocument doc;
+    readSettingsFile(doc);
+    doc["version"] = kSettingsVersion;
+    doc["theme"] = gThemePreset;
+    doc["utms"]["auto_check"] = gUtmsAutoCheck;
+    doc["utms"]["pack_url"] = gUtmsPackUrl;
+    if (gWifiSsid.length()) {
+        doc["wifi"]["ssid"] = gWifiSsid;
+        doc["wifi"]["pass"] = gWifiPass;
+    }
+    return writeSettingsDoc(doc);
+}
 
 }  // namespace m5os::settings

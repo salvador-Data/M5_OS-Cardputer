@@ -16,6 +16,12 @@ static const char* kHomeAppsDir = "/home/default/apps";
 static const char* kHomeCacheDir = "/home/default/cache";
 static const char* kSettingsPath = "/home/default/settings.json";
 static const char* kSavesDir = "/home/default/saves";
+/** Unified Threat Management — signatures, quarantine, logs. */
+static const char* kUtmsDir = "/home/default/utms";
+static const char* kThreatPackPath = "/home/default/utms/threat_pack.json";
+static const char* kQuarantineDir = "/home/default/utms/quarantine";
+static const char* kUtmsLogPath = "/home/default/utms/utms.log";
+static const char* kFirewallRulesPath = "/home/default/utms/firewall_rules.json";
 static const char* kTmpDir = "/tmp";
 static const char* kVarLogDir = "/var/log";
 static const char* kSystemMarkerPath = "/system/M5OS_CARDPUTER.txt";

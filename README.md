@@ -51,6 +51,7 @@ Product page: [Hacker Planet Cardputer](https://salvador-Data.github.io/cyberThr
 | **File explorer** | File explorer | Walk SD paths from the device |
 | **Save on SD** | Save / export to SD | Theme, Wi-Fi, log snapshots, and settings backups on the card |
 | **M5Burner bridge** | M5Burner / recovery | On-device recovery steps plus serial workflow for desktop base OS flash |
+| **UTMS / Security** | UTMS / Security | Micro-AV scan, threat-pack OTA, IDS status, quarantine, firewall stub, UTMS logs |
 | **Serial logging** | (automatic) | JSON events on USB at 115200 baud |
 | **Battery / power** | (status bar) | Auto SAV power savings at 20% battery or below |
 
@@ -229,11 +230,75 @@ On first boot with a FAT32 card inserted, M5 OS creates:
   saves/              Log/settings export snapshots
   apps/<name>/        Per-app data compartments
   cache/              Reclaimable cache (GC menu)
+  utms/
+    threat_pack.json  OTA threat signatures (hashes + strings)
+    quarantine/       Isolated suspicious files
+    utms.log          UTMS event log
+    firewall_rules.json  Lab soft-AP allow/deny (stub)
 /tmp/                 Temp files (24h TTL sweep on boot)
 /var/log/             Rotated logs (no FAT defrag - see SECURITY.md)
 ```
 
 **Legacy:** flat `/firmware/*.bin` and root `/manifest.json` still work; new downloads land in `/apps/<slug>/`.
+
+---
+
+## UTMS (Unified Threat Management)
+
+Cardputer-feasible defensive features under **Main menu -> UTMS / Security**:
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| **Micro-AV** | Initial | SD `/apps/*.bin` hash scan against threat pack; quarantine dir on SD |
+| **Launch gate IPS** | Existing | SHA256 verify before Load app (Enter confirm); blocks bad bins |
+| **Threat intel OTA** | Initial | **Update signatures** fetches signed JSON pack over HTTPS |
+| **IDS status** | Stub | Last check time, pack version, alert count placeholder |
+| **Quarantine** | Initial | List files in `/home/default/utms/quarantine/` |
+| **Firewall rules** | Stub | View/edit JSON allow/deny list on SD (lab soft-AP) |
+| **Logging & export** | Initial | Append-only `utms.log`; export via Save / export |
+| **Session integrity** | Existing | `m5os_session` save prompt on app exit |
+| **Certificate pinning** | Partial | HTTPS URL whitelist (github/salvador-Data, hackerplanet.dev, LauncherHub, M5Burner CDN) |
+| **Wi-Fi IDS** | Future | Deauth / rogue SSID on lab AP |
+| **DNS/URL blocklist** | Future | Small curated lists for lab HTTP client |
+| **Honeypot tripwire** | Future | Decoy files / beacon on SD |
+| **CyberThreatGotchi Pro feed** | Future | Pro API key + signed pack channel |
+
+**Not feasible on ESP32-S3 Cardputer:** full gateway DPI, ClamAV-scale signature DB, enterprise UTM appliance throughput, or always-on inline network bridge for arbitrary LAN traffic.
+
+### Threat pack OTA
+
+1. Connect Wi-Fi, insert SD.
+2. **UTMS / Security -> Update signatures** (or enable auto-check in **UTMS settings**).
+3. Pack downloads from compile-time URL (`M5OS_UTMS_PACK_URL`) or `settings.json` override `utms.pack_url`.
+4. Optional `sha256` in JSON is verified against canonical body (without the sha256 key).
+5. Atomic write to `/home/default/utms/threat_pack.json`; NVS stores `last_ver` and `last_chk`.
+
+Pack format (`data/threat_pack.example.json`):
+
+```json
+{
+  "version": "2026.05.29-stub",
+  "sha256": "<optional hex of body without sha256 key>",
+  "signatures": {
+    "hashes": ["<sha256 hex>", "..."],
+    "strings": ["EICAR-STANDARD-ANTIVIRUS-TEST-FILE"]
+  }
+}
+```
+
+Validate on PC:
+
+```powershell
+python scripts/utms_threat_pack.py
+```
+
+Or in pytest: `pytest tests/test_utms_threat_pack.py -v`
+
+Override pack URL at build time:
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -DM5OS_UTMS_PACK_URL=\"https://hackerplanet.dev/api/utms/pack.json\"
+```
 
 Shipped catalog entries link Hacker Planet apps:
 
@@ -300,6 +365,8 @@ M5_OS-Cardputer/
 |   |-- burner_bridge.cpp     # M5Burner recovery workflow
 |   |-- wifi_manager.cpp      # Wi-Fi scan/connect
 |   |-- m5os_security.cpp     # URL whitelist + path sanitizers
+|   |-- utms_menu.cpp         # UTMS submenu screens
+|   |-- utms_threat_pack.cpp  # Threat pack OTA + NVS
 |   `-- serial_log.cpp        # USB JSON logging
 |-- include/
 |-- scripts/

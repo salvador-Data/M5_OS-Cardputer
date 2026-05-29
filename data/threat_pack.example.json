@@ -1,0 +1,12 @@
+{
+  "version": "2026.05.29-stub",
+  "sha256": "",
+  "signatures": {
+    "hashes": [
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "strings": [
+      "EICAR-STANDARD-ANTIVIRUS-TEST-FILE"
+    ]
+  }
+}

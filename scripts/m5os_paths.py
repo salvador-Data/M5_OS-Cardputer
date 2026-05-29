@@ -20,6 +20,8 @@ VFS_DIRS = (
     "/home/default/apps",
     "/home/default/cache",
     "/home/default/saves",
+    "/home/default/utms",
+    "/home/default/utms/quarantine",
     "/home/default/settings.json",
     "/tmp",
     "/var/log",

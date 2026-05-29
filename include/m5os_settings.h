@@ -29,4 +29,13 @@ const char* themePresetName(int preset);
 String savedWifiSsid();
 String savedWifiPass();
 
+/** UTMS threat-pack OTA URL (settings.json override or compile default). */
+String utmsPackUrl();
+
+/** Auto-check threat pack on boot when Wi-Fi connected (default false). */
+bool utmsAutoCheckOnBoot();
+
+bool saveUtmsAutoCheck(bool enabled);
+bool saveUtmsPackUrl(const char* url);
+
 }  // namespace m5os::settings

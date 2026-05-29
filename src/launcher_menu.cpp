@@ -10,6 +10,7 @@
 #include "serial_log.h"
 #include "power_manager.h"
 #include "ui_display.h"
+#include "utms.h"
 #include "wifi_manager.h"
 
 #include <ArduinoJson.h>
@@ -475,11 +476,14 @@ void LauncherMenu::showStorageCleanup() {
     }
 }
 
+void LauncherMenu::showUtmsMenu() { utms::showUtmsMenu(); }
+
 void LauncherMenu::showHelp() { ui::drawHelpOverlay(); }
 
 void LauncherMenu::runMainLoop() {
     static const char* items[] = {
         "WiFi setup",
+        "UTMS / Security",
         "Load app (ESC/`)",
         "Load from catalog",
         "Load from M5Burner catalog",
@@ -506,37 +510,40 @@ void LauncherMenu::runMainLoop() {
                 showWifiSetup();
                 break;
             case 1:
-                showAppSwitcher();
+                showUtmsMenu();
                 break;
             case 2:
-                showLoadCatalog();
+                showAppSwitcher();
                 break;
             case 3:
-                showFlashBurnerCatalog();
+                showLoadCatalog();
                 break;
             case 4:
-                refreshCatalog();
+                showFlashBurnerCatalog();
                 break;
             case 5:
-                showStorageCleanup();
+                refreshCatalog();
                 break;
             case 6:
+                showStorageCleanup();
+                break;
+            case 7:
                 exportCatalogSerial();
                 ui::showMessage("Exported", "Catalog on USB serial", TFT_GREEN, 900);
                 break;
-            case 7:
+            case 8:
                 showFileExplorer("/");
                 break;
-            case 8:
+            case 9:
                 showSaveExportMenu();
                 break;
-            case 9:
+            case 10:
                 showThemeMenu();
                 break;
-            case 10:
+            case 11:
                 showBurnerBridge();
                 break;
-            case 11:
+            case 12:
                 showHelp();
                 break;
             default:

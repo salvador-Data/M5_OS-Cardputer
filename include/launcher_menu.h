@@ -23,6 +23,7 @@ public:
     void showBurnerBridge();
     void showStorageCleanup();
     void showHelp();
+    void showUtmsMenu();
     void exportCatalogSerial();
 
 private:
