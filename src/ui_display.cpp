@@ -75,11 +75,11 @@ void drawPasswordFrame(const char* title, size_t length, size_t scrollOffset, bo
         d.fillRect(0, 20, d.width(), 72, TFT_BLACK);
     }
 
-    // Fixed contrast — theme lerp can wash out field/text (all-white screen).
-    const uint16_t fieldBg = TFT_DARKGREY;
+    // High-contrast field — never theme-derived (ST7789 wash-out on preset 3).
+    const uint16_t fieldBg = 0x3186;  // dark blue-grey
     const uint16_t fieldFg = TFT_WHITE;
     const uint16_t labelFg = TFT_WHITE;
-    const uint16_t hintFg = TFT_DARKGREY;
+    const uint16_t hintFg = TFT_CYAN;
 
     d.setTextColor(labelFg, TFT_BLACK);
     d.setCursor(4, 24);
@@ -132,7 +132,7 @@ void drawPasswordFrame(const char* title, size_t length, size_t scrollOffset, bo
 
     d.setTextColor(hintFg, TFT_BLACK);
     d.setCursor(4, 66);
-    d.print("Enter save  ` cancel");
+    d.printf("Enter save  ` cancel  (%u)", static_cast<unsigned>(length));
 }
 
 void playBootChime() {
@@ -411,6 +411,13 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
     size_t lastDrawToken = SIZE_MAX;
     bool needFullFrame = true;
 
+    // Drain stale keys from the network list.
+    for (int i = 0; i < 30; ++i) {
+        m5os::update();
+        if (!M5Cardputer.Keyboard.isPressed()) break;
+        delay(10);
+    }
+
     auto drawToken = [&]() -> size_t { return (length << 16) | (scrollOffset & 0xFFFF); };
 
     while (true) {
@@ -425,7 +432,8 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
         }
 
         m5os::update();
-        if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) {
+
+        if (!M5Cardputer.Keyboard.isChange()) {
             delay(power::uiLoopDelayMs());
             continue;
         }

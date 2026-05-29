@@ -52,7 +52,10 @@ bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t
     ssidOut[ssidLen - 1] = '\0';
 
     passOut[0] = '\0';
-    ui::promptPassword(passOut, passLen, "WiFi password");
+    if (!ui::promptPassword(passOut, passLen, "WiFi password")) {
+        ui::showMessage("WiFi", "Password cancelled", TFT_YELLOW, 1200);
+        return false;
+    }
 
     ui::drawHeader("WiFi connect");
     m5os::lcd().setCursor(4, 30);

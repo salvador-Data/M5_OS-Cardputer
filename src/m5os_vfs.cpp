@@ -14,18 +14,26 @@ namespace {
 bool g_sdMounted = false;
 String g_lastMountError;
 
-// Match M5 official sdcard.ino: global SPI on Cardputer pins (CS12 SCK40 MISO39 MOSI14).
-// Do not use HSPI/SPI3 — display (lgfx) owns that bus; a second SPIClass(FSPI) fights default SPI.
+// Dedicated FSPI (SPI2) for microSD — never touch global SPI or SPI3 (display / lgfx).
+SPIClass g_sdSpi(FSPI);
+bool g_sdSpiReady = false;
+
 void initSdSpiBus() {
     pinMode(kSdCsPin, OUTPUT);
     digitalWrite(kSdCsPin, HIGH);
-    SPI.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
+    if (!g_sdSpiReady) {
+        g_sdSpi.begin(kSdSclkPin, kSdMisoPin, kSdMosiPin, kSdCsPin);
+        g_sdSpiReady = true;
+    }
 }
 
 void resetSdSpiBus() {
     SD.end();
-    SPI.end();
-    delay(30);
+    if (g_sdSpiReady) {
+        g_sdSpi.end();
+        g_sdSpiReady = false;
+    }
+    delay(50);
     initSdSpiBus();
 }
 
@@ -43,7 +51,8 @@ const char* cardTypeLabel(uint8_t cardType) {
 }
 
 bool trySdMountOnce(uint32_t hz, String* failDetail) {
-    if (SD.begin(kSdCsPin, SPI, hz)) {
+    initSdSpiBus();
+    if (SD.begin(kSdCsPin, g_sdSpi, hz)) {
         const uint8_t cardType = SD.cardType();
         if (cardType == CARD_NONE) {
             SD.end();
@@ -62,7 +71,7 @@ bool trySdMountOnce(uint32_t hz, String* failDetail) {
 String g_lastMountDetail;
 
 bool trySdMount() {
-    const uint32_t speeds[] = {25000000, 10000000, 4000000};
+    const uint32_t speeds[] = {25000000, 10000000, 4000000, 1000000};
     constexpr uint8_t kRounds = 6;
     String lastDetail;
 
@@ -204,9 +213,12 @@ MountResult mountAndInit() {
     g_sdMounted = false;
     g_lastMountError = "";
     SD.end();
-    SPI.end();
-    // Let microSD power stabilize after M5Cardputer.begin() (official example order).
-    delay(400);
+    if (g_sdSpiReady) {
+        g_sdSpi.end();
+        g_sdSpiReady = false;
+    }
+    // Let microSD power stabilize after M5Cardputer.begin() (do not SPI.end() — breaks display).
+    delay(600);
     if (!trySdMount()) {
         result.message = mountFailureMessage();
         g_lastMountError = result.message;
