@@ -30,7 +30,9 @@ void setup() {
     m5os::tryEarlyRecoveryBoot();
     m5os::applyColdBootHomeRestore();
     m5os::applyCrashResetHomeRestore();
-    m5os::clearLaunchPending();
+    if (!m5os::tryLaunchPendingHandoff()) {
+        m5os::clearLaunchPending();
+    }
     m5os::saveHomeAppPartition();
     m5os::beginWatchdog();
     m5os::stamp::begin();
@@ -38,6 +40,10 @@ void setup() {
 
     const bool sdOk = gCatalog.ensureStorage();
     m5os::ui::bootIntroBegin();
+
+    if (m5os::consumeLaunchHandoffFailure()) {
+        m5os::ui::showMessage("Load app failed", "Run slot invalid\nRe-copy from SD", TFT_RED, 2500);
+    }
 
     if (!sdOk) {
         const String sdDetail = m5os::vfs::lastMountError().length() ? m5os::vfs::lastMountError() : "SD offline";

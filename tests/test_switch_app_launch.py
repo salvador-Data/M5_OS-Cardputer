@@ -114,6 +114,17 @@ def test_launch_shows_progress_before_hash():
     assert "copySdToOta" in text
 
 
+def test_launch_begins_session_before_copy():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
+        "AppLauncher::AppLauncher"
+    )]
+    assert "beginLaunchSession()" in helper
+    assert helper.index("beginLaunchSession()") < helper.index("copySdToOta")
+    assert "resolveLaunchBootPartition()" in helper
+    assert "cancelLaunchSession()" in helper
+
+
 def test_launch_reopens_sd_file_after_hash():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
     helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(

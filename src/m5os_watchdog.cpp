@@ -14,7 +14,7 @@ namespace {
 bool gWatchdogReady = false;
 
 void shutdownRestoreHome() {
-    if (isLaunchPending()) return;
+    if (launchSessionActive()) return;
     restoreBootToHome();
     log::info("m5os_shutdown_home", "restore");
 }

@@ -58,7 +58,21 @@ void setLaunchPending(bool pending);
 bool isLaunchPending();
 void clearLaunchPending();
 
-/** Reboot into staged OTA slot (ESP_RST_SW); does not run on cold power-on restore path. */
+/** Mark an intentional load-app restart (RAM + NVS) before OTA copy or reboot. */
+void beginLaunchSession();
+void cancelLaunchSession();
+bool launchSessionActive();
+
+/** Inactive OTA slot with a valid ESP image header (0xE9). */
+const esp_partition_t* resolveLaunchBootPartition();
+
+/** Phase-2: after SW reset with launch pending, point otadata at staged app and restart. */
+bool tryLaunchPendingHandoff();
+
+/** True once if the last boot handoff failed; clears the flag. */
+bool consumeLaunchHandoffFailure();
+
+/** Phase-1: restore home otadata, keep launch pending, SW restart into M5 OS handoff. */
 bool launchStagedAppSession();
 
 const esp_partition_t* stagingOtaPartition();

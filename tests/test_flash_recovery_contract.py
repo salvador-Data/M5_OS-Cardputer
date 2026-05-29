@@ -34,6 +34,7 @@ def test_recovery_boot_wired_in_main():
     assert "tryEarlyRecoveryBoot()" in text
     assert "applyColdBootHomeRestore()" in text
     assert "applyCrashResetHomeRestore()" in text
+    assert "tryLaunchPendingHandoff()" in text
     assert "saveHomeAppPartition()" in text
     assert "beginWatchdog()" in text
     flash = FLASH_CPP.read_text(encoding="utf-8")
@@ -54,6 +55,9 @@ def test_recovery_helpers_declared():
         "isLaunchPending",
         "clearLaunchPending",
         "launchStagedAppSession",
+        "tryLaunchPendingHandoff",
+        "beginLaunchSession",
+        "resolveLaunchBootPartition",
         "stagingOtaPartition",
     ):
         assert sym in header
