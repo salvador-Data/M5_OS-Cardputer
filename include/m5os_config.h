@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace m5os {
 
@@ -29,5 +30,15 @@ static const char* kAppBleBot = "ble_bot";
 
 /** Max app .bin for SD + OTA (smaller slot in partitions/m5os_cardputer_8MB.csv). */
 static const size_t kMaxAppBinBytes = 0x3F0000;
+
+/** M5 OS menu freeze recovery — TWDT timeout then restore home + reboot. */
+static const uint32_t kWatchdogTimeoutSec = 30;
+
+/** UI theme presets (see ui::setThemePreset). */
+static const int kThemePresetCount = 6;
+static const int kDefaultThemePreset = 1;  // Hacker Green
+
+/** Cardputer Stamp-S3 SK6812 data pin (M5Unified rgb_led table). */
+static const int kStampLedGpio = 21;
 
 }  // namespace m5os

@@ -8,8 +8,8 @@
 namespace m5os::ui {
 
 struct Theme {
-    uint16_t primary = 0x05A1;   // Hacker Planet teal #00b48c
-    uint16_t secondary = 0xCE9F;  // magenta #d2a8ff
+    uint16_t primary = 0x07E0;    // Hacker Green default
+    uint16_t secondary = 0x0320;
 };
 
 enum class BootStage { MountSd, LoadManifest, GcScan, Ready };

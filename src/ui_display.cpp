@@ -1,8 +1,10 @@
 #include "ui_display.h"
 
 #include "boot_jokes.h"
+#include "m5os_config.h"
 #include "m5os_vfs.h"
 #include "power_manager.h"
+#include "stamp_glow.h"
 
 #include <M5Unified.h>
 #include <SD.h>
@@ -13,7 +15,7 @@
 namespace m5os::ui {
 
 static Theme gTheme;
-static int gThemePreset = 3;
+static int gThemePreset = kDefaultThemePreset;
 static unsigned long gBootStartMs = 0;
 
 namespace {
@@ -843,7 +845,7 @@ int getThemePreset() { return gThemePreset; }
 
 void setThemePreset(int preset) {
     if (preset < 0) preset = 0;
-    if (preset > 3) preset = 3;
+    if (preset >= kThemePresetCount) preset = kThemePresetCount - 1;
     gThemePreset = preset;
     switch (preset) {
         case 1:
@@ -858,11 +860,20 @@ void setThemePreset(int preset) {
             gTheme.primary = 0x05A1;
             gTheme.secondary = 0xCE9F;
             break;
+        case 4:
+            gTheme.primary = 0x07E0;
+            gTheme.secondary = 0x07FF;
+            break;
+        case 5:
+            gTheme.primary = 0xFD20;
+            gTheme.secondary = 0x8200;
+            break;
         default:
             gTheme.primary = 0xB6DF;
             gTheme.secondary = 0x0083;
             break;
     }
+    stamp::applyTheme();
 }
 
 void drawHeader(const char* title) {
@@ -888,7 +899,7 @@ void showMessage(const char* title, const String& body, uint16_t color, unsigned
 }
 
 void bootIntroBegin() {
-    setThemePreset(3);
+    setThemePreset(kDefaultThemePreset);
     gBootStartMs = millis();
     playHackerPlanetIntro();
     showBootFrame(5, "Booting", "", 0);
@@ -1035,15 +1046,15 @@ void drawHelpOverlay() {
     d.setTextColor(TFT_WHITE, TFT_BLACK);
     d.setCursor(4, 24);
     d.println(";/. w/s  navigate");
-    d.println("Enter     select / launch");
-    d.println("ESC/`     app switcher (main menu)");
+    d.println("Enter     select / load app");
+    d.println("ESC/`     load app (main menu)");
     d.println("Tab       next app (in switcher)");
     d.println("h / ?     this help");
     d.println("e         export catalog serial");
     d.println("ESC/`     back (Y/N confirm)");
     d.setTextColor(TFT_DARKGREY, TFT_BLACK);
     d.setCursor(4, 104);
-    d.println("Apps live on SD; launch");
+    d.println("Apps live on SD; load app");
     d.println("copies to run slot when needed.");
     d.setCursor(4, 118);
     d.print("Authorized lab only");

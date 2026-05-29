@@ -40,7 +40,7 @@ M5 OS launcher  ←── reflash to return   /apps/manifest.json
    - **Wi-Fi:** Menu → **Refresh manifest** → **Load from catalog**
    - **Offline:** Copy `.bin` to SD (see paths below)
    - **PC helper:** `python scripts/import_m5burner_entry.py --bin … --name … --merge data/manifest.example.json`
-3. **Switch / run app:** Menu → **Switch app (ESC/`)** → pick app → **Enter run slot**
+3. **Load app:** Menu → **Load app (ESC/`)** → pick app → **Enter run slot**
 4. **Return to M5 OS:** Hold **ESC/` (backtick) at power-on** for recovery boot, or USB reflash M5 OS (PlatformIO or M5Burner). App `.bin` files **stay on SD**.
 
 Launching an app writes the SD `.bin` into the ESP32 OTA slot and reboots. M5 OS is no longer in flash until you reflash or use recovery boot — but you do **not** re-load apps from GitHub.
@@ -49,10 +49,10 @@ Launching an app writes the SD `.bin` into the ESP32 OTA slot and reboots. M5 OS
 
 | Key | In main menu | In app switcher |
 |-----|--------------|-----------------|
-| **ESC/`** | Opens **Switch app** picker | Returns to main menu |
+| **ESC/`** | Opens **Load app** picker | Returns to main menu |
 | **Tab** | — | Cycles to next installed app |
 | **;/. w/s** | Navigate menu | Navigate list |
-| **Enter** | Select menu item | Launch highlighted app |
+| **Enter** | Select menu item | Load highlighted app |
 
 While a third-party app is running, M5 OS is not active — **hold ESC/` at power-on** to restore M5 OS boot (recovery), or USB reflash M5 OS to **COM13** (or your Cardputer port).
 
@@ -79,7 +79,7 @@ Insert **FAT32** microSD (contacts away from screen). Boot should show **VFS rea
 3. Either:
    - **Load from M5Burner catalog** → pick firmware → saves to SD (SPIFFS/composite apps **do not auto-reboot** — M5 OS stays active)
    - **Load from catalog** → save `.bin` to SD only
-4. **Switch app (ESC/`)** to launch from SD without Wi-Fi
+4. **Load app (ESC/`)** to run from SD without Wi-Fi
 
 ### Option B — Manual SD sideload (no Wi-Fi)
 
@@ -108,6 +108,18 @@ python scripts/import_m5burner_entry.py --bin "C:\path\to\ble_bot.bin" --name "B
 
 Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub or copy to `/apps/manifest.json` on SD.
 
+## Freeze and crash recovery (M5 OS menu)
+
+| Event | Behavior |
+|-------|----------|
+| **Menu freeze** (no `m5os::update()` for **30 s**) | ESP task watchdog panic → shutdown hook restores home boot partition → auto-reboot into M5 OS main menu |
+| **M5 OS panic / watchdog reset** | `CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT` — auto-reboot; on boot `applyCrashResetHomeRestore()` points otadata at saved M5 OS home |
+| **Cold power-on** | `applyColdBootHomeRestore()` — boots M5 OS home (returns from a loaded app after unplug) |
+| **ESC/` at boot** | `tryEarlyRecoveryBoot()` — manual return to M5 OS home |
+| **Load app reboot** | `launch_pending` NVS flag skips shutdown home-restore so otadata stays on staged app |
+
+Third-party apps that crash-loop without power-cycling may still require **unplug + power-on** or **ESC/` at M5 OS boot** — M5 OS cannot run code inside a foreign app binary.
+
 ## Security (implemented)
 
 | Control | Detail |
@@ -116,7 +128,7 @@ Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub o
 | SHA256 | Optional per manifest entry; verified on download and before load to run slot |
 | Size limit | App bins capped at **~3.94 MiB** (`kMaxAppBinBytes` = 0x3F0000) — matches `partitions/m5os_cardputer_8MB.csv` OTA slot |
 | Path safety | No `..` or slashes in bin names; slugs sanitized |
-| Launch confirm | User must confirm before any OTA write; failed load leaves launcher intact |
+| Load app confirm | User must confirm before any OTA write; failed load leaves launcher intact |
 | No partition-0 flash | M5 OS never writes bootloader/partition table from the menu — USB/M5Burner only |
 
 Validate before publishing:
@@ -133,7 +145,7 @@ pytest tests/ -v
 
 - First install on a new Cardputer
 - M5 OS release notes (SD pins, Enter key, boot splash fixes, etc.)
-- After **Launch installed app** — you ran an app and want the launcher back
+- After **Load app** — you ran an app and want the launcher back
 - Deliberate migration to a different base firmware (UIFlow, M5 Launcher, etc.)
 
 You do **not** re-flash base when adding, updating, or deleting app `.bin` files on SD.

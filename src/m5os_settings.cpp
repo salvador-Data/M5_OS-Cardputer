@@ -1,5 +1,6 @@
 #include "m5os_settings.h"
 
+#include "m5os_config.h"
 #include "m5os_vfs.h"
 #include "serial_log.h"
 
@@ -11,7 +12,7 @@ namespace m5os::settings {
 namespace {
 
 constexpr int kSettingsVersion = 1;
-int gThemePreset = 3;
+int gThemePreset = kDefaultThemePreset;
 String gWifiSsid;
 String gWifiPass;
 
@@ -89,7 +90,7 @@ bool load() {
     JsonDocument doc;
     if (!readSettingsFile(doc)) return false;
     const int theme = doc["theme"] | gThemePreset;
-    if (theme >= 0 && theme <= 3) gThemePreset = theme;
+    if (theme >= 0 && theme < kThemePresetCount) gThemePreset = theme;
     gWifiSsid = doc["wifi"]["ssid"] | "";
     gWifiPass = doc["wifi"]["pass"] | "";
     gWifiSsid.trim();
@@ -98,7 +99,7 @@ bool load() {
 }
 
 bool saveTheme(int preset) {
-    if (preset < 0 || preset > 3) return false;
+    if (preset < 0 || preset >= kThemePresetCount) return false;
     gThemePreset = preset;
     if (!ensureSdMounted()) return false;
     JsonDocument doc;
@@ -170,8 +171,10 @@ bool exportSettingsSnapshot(String* outPath) {
 int themePreset() { return gThemePreset; }
 
 const char* themePresetName(int preset) {
-    static const char* names[] = {"Baby Blue", "Hacker Green", "Mr. Robot Red", "Hacker Planet"};
-    if (preset < 0 || preset > 3) preset = 3;
+    static const char* names[] = {
+        "Baby Blue", "Hacker Green", "Mr. Robot Red", "Hacker Planet", "Matrix Neon", "Amber Terminal",
+    };
+    if (preset < 0 || preset >= kThemePresetCount) preset = kDefaultThemePreset;
     return names[preset];
 }
 

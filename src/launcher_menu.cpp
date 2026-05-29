@@ -62,13 +62,13 @@ void LauncherMenu::exportCatalogSerial() {
 void LauncherMenu::showAppSwitcher() {
     m5os::keyboardDrainBack();
     if (!settings::ensureSdMounted()) {
-        showSdRequired("Switch app needs SD");
+        showSdRequired("Load app needs SD");
         return;
     }
     catalog_.scanInstalled();
     const auto& installed = catalog_.installed();
     if (installed.empty()) {
-        ui::showMessage("Switch app", "No apps on SD\nLoad from catalog", TFT_YELLOW);
+        ui::showMessage("Load app", "No apps on SD\nLoad from catalog", TFT_YELLOW);
         return;
     }
 
@@ -79,7 +79,7 @@ void LauncherMenu::showAppSwitcher() {
     constexpr int kVisible = 6;
 
     auto redrawSwitcher = [&]() {
-        ui::drawHeader("Switch app");
+        ui::drawHeader("Load app");
         if (index < scroll) scroll = index;
         if (index >= scroll + kVisible) scroll = index - kVisible + 1;
 
@@ -102,7 +102,7 @@ void LauncherMenu::showAppSwitcher() {
 
         m5os::lcd().setTextColor(TFT_WHITE, TFT_BLACK);
         m5os::lcd().setCursor(4, 108);
-        m5os::lcd().print("Enter launch  Tab next");
+        m5os::lcd().print("Enter load app  Tab next");
         m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
         m5os::lcd().setCursor(4, 118);
         m5os::lcd().print("ESC/` confirm back");
@@ -129,9 +129,9 @@ void LauncherMenu::showAppSwitcher() {
             }
         }
         if (keys.back || m5os::keyboardBackJustPressed()) return;
-        if (keys.ok) {
+        if (keys.ok || m5os::keyboardEnterJustPressed()) {
             const auto& pkg = installed[index];
-            ui::drawHeader("Launch app");
+            ui::drawHeader("Load app");
             m5os::lcd().setCursor(4, 28);
             m5os::lcd().println(pkg.name);
             m5os::lcd().setCursor(4, 44);
@@ -139,17 +139,16 @@ void LauncherMenu::showAppSwitcher() {
             m5os::lcd().setCursor(4, 64);
             m5os::lcd().print("Enter copy to run slot");
             m5os::lcd().setCursor(4, 78);
-            m5os::lcd().print("ESC/` confirm back");
+            m5os::lcd().print("ESC/` back");
 
             m5os::keyboardDrainBack();
+            m5os::keyboardDrainEnter();
             while (true) {
                 m5os::update();
                 if (m5os::keyboardBackJustPressed()) break;
-                Buttons confirm = m5os::readButtons();
-                if (confirm.back) break;
-                if (confirm.ok) {
+                if (m5os::keyboardEnterJustPressed()) {
                     LaunchResult result = launcher_.launchBinFile(pkg.binFile);
-                    if (!result.ok) ui::showMessage("Launch failed", result.message, TFT_RED);
+                    if (!result.ok) ui::showMessage("Load app failed", result.message, TFT_RED);
                     return;
                 }
                 delay(power::uiLoopDelayMs());
@@ -349,7 +348,9 @@ void LauncherMenu::showFileExplorer(const char* path) {
 }
 
 void LauncherMenu::showThemeMenu() {
-    static const char* themes[] = {"Baby Blue", "Hacker Green", "Mr. Robot Red", "Hacker Planet"};
+    static const char* themes[] = {
+        "Baby Blue", "Hacker Green", "Mr. Robot Red", "Hacker Planet", "Matrix Neon", "Amber Terminal",
+    };
     std::vector<String> labels;
     for (auto* t : themes) labels.push_back(t);
     const int pick = ui::selectFromList(labels, "Theme", ui::getThemePreset());
@@ -435,7 +436,7 @@ void LauncherMenu::showHelp() { ui::drawHelpOverlay(); }
 void LauncherMenu::runMainLoop() {
     static const char* items[] = {
         "WiFi setup",
-        "Switch app (ESC/`)",
+        "Load app (ESC/`)",
         "Load from catalog",
         "Load from M5Burner catalog",
         "Refresh manifest",

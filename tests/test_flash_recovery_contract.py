@@ -32,7 +32,9 @@ def test_recovery_boot_wired_in_main():
     text = MAIN_CPP.read_text(encoding="utf-8")
     assert "tryEarlyRecoveryBoot()" in text
     assert "applyColdBootHomeRestore()" in text
+    assert "applyCrashResetHomeRestore()" in text
     assert "saveHomeAppPartition()" in text
+    assert "beginWatchdog()" in text
     flash = FLASH_CPP.read_text(encoding="utf-8")
     assert "ESP_RST_POWERON" in flash
 
@@ -46,6 +48,10 @@ def test_recovery_helpers_declared():
         "recoveryBootRequested",
         "tryEarlyRecoveryBoot",
         "applyColdBootHomeRestore",
+        "applyCrashResetHomeRestore",
+        "setLaunchPending",
+        "isLaunchPending",
+        "clearLaunchPending",
         "launchStagedAppSession",
         "stagingOtaPartition",
     ):
@@ -74,4 +80,4 @@ def test_launcher_menu_no_auto_boot_hint():
 def test_app_switcher_on_main_menu_esc():
     text = LAUNCHER_CPP.read_text(encoding="utf-8")
     assert "showAppSwitcher" in text
-    assert "Switch app (ESC/`)" in text
+    assert "Load app (ESC/`)" in text

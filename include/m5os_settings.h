@@ -10,7 +10,7 @@ bool ensureSdMounted(String* detailOut = nullptr);
 /** Load /home/default/settings.json when SD is mounted. */
 bool load();
 
-/** Persist theme preset (0–3) to settings.json. */
+/** Persist theme preset (0–5) to settings.json. */
 bool saveTheme(int preset);
 
 /** Persist Wi-Fi credentials (lab SD only — plaintext on FAT32). */

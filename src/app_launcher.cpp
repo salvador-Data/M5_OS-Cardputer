@@ -112,16 +112,16 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     }
     firmware.close();
 
-    ui::showFlashProgress(0, "Launch app", safeBin + "\nSD -> run slot");
+    ui::showFlashProgress(0, "Load app", safeBin + "\nSD -> run slot");
     m5os::update();
 
     if (canSkipFlashToCachedOta(safeBin, sdDigest)) {
-        ui::showFlashProgress(100, "Launch app", safeBin + "\nAlready loaded — reboot");
+        ui::showFlashProgress(100, "Load app", safeBin + "\nAlready loaded — reboot");
         result.ok = true;
         result.skippedFlash = true;
         result.message = "Rebooting into app";
         log::info("launch_cached_ok", safeBin);
-        ui::showMessage("Launch", safeBin + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
+        ui::showMessage("Load app", safeBin + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
         if (launchStagedAppSession()) return result;
         result.ok = false;
         result.message = "Boot staged app failed";
@@ -177,7 +177,7 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     result.ok = true;
     result.message = "Rebooting into app";
     log::info("launch_ok", safeBin);
-    ui::showMessage("Launch", safeBin + "\nRebooting...", TFT_GREEN, 1200);
+    ui::showMessage("Load app", safeBin + "\nRebooting...", TFT_GREEN, 1200);
     if (launchStagedAppSession()) return result;
     result.ok = false;
     result.message = "Boot staged app failed";

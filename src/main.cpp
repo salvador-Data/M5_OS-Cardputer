@@ -18,6 +18,7 @@
 
 #include "M5OSDevice.h"
 #include "m5os_flash.h"
+#include "stamp_glow.h"
 
 static m5os::FirmwareCatalog gCatalog;
 static m5os::AppLauncher gLauncher(gCatalog);
@@ -28,7 +29,11 @@ void setup() {
     m5os::begin();
     m5os::tryEarlyRecoveryBoot();
     m5os::applyColdBootHomeRestore();
+    m5os::applyCrashResetHomeRestore();
+    m5os::clearLaunchPending();
     m5os::saveHomeAppPartition();
+    m5os::beginWatchdog();
+    m5os::stamp::begin();
     m5os::power::begin();
 
     const bool sdOk = gCatalog.ensureStorage();

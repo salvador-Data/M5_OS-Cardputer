@@ -2,7 +2,12 @@
 
 #include <M5Cardputer.h>
 
+#include "m5os_watchdog.h"
 #include "power_manager.h"
+
+namespace m5os::stamp {
+void tick();
+}
 
 namespace m5os {
 
@@ -17,6 +22,8 @@ inline void begin() {
 inline void update() {
     M5Cardputer.update();
     power::tick();
+    feedWatchdog();
+    stamp::tick();
 }
 
 
@@ -60,6 +67,40 @@ inline void keyboardDrainBack() {
         delay(5);
     }
     while (keyboardBackHeld()) {
+        update();
+        delay(10);
+    }
+}
+
+inline bool keyboardEnterHeld() {
+    if (!M5Cardputer.Keyboard.isPressed()) return false;
+    const auto status = M5Cardputer.Keyboard.keysState();
+    if (status.enter) return true;
+    for (auto key : status.word) {
+        if (key == '\n' || key == '\r') return true;
+    }
+    return false;
+}
+
+/** Enter confirm — keysState().enter like WiFi password (no isPressed gate). */
+inline bool keyboardEnterJustPressed() {
+    if (!M5Cardputer.Keyboard.isChange()) return false;
+    const auto status = M5Cardputer.Keyboard.keysState();
+    if (status.enter) return true;
+    for (auto key : status.word) {
+        if (key == '\n' || key == '\r') return true;
+    }
+    return false;
+}
+
+/** Drop Enter held from list pick before load confirm. */
+inline void keyboardDrainEnter() {
+    for (int i = 0; i < 24; ++i) {
+        update();
+        if (!M5Cardputer.Keyboard.isChange() && !keyboardEnterHeld()) break;
+        delay(5);
+    }
+    while (keyboardEnterHeld()) {
         update();
         delay(10);
     }

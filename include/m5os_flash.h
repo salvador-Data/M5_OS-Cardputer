@@ -50,6 +50,14 @@ void tryEarlyRecoveryBoot();
 /** On ESP_RST_POWERON only, point otadata at saved M5 OS home partition. */
 void applyColdBootHomeRestore();
 
+/** After panic/watchdog reset, point otadata at saved M5 OS home partition. */
+void applyCrashResetHomeRestore();
+
+/** NVS flag: skip shutdown home-restore while rebooting into staged app. */
+void setLaunchPending(bool pending);
+bool isLaunchPending();
+void clearLaunchPending();
+
 /** Reboot into staged OTA slot (ESP_RST_SW); does not run on cold power-on restore path. */
 bool launchStagedAppSession();
 

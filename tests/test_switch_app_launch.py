@@ -1,4 +1,4 @@
-"""Contract tests for Switch app SD path resolution and ESC entry."""
+"""Contract tests for Load app SD path resolution and keyboard entry."""
 
 from pathlib import Path
 
@@ -36,6 +36,22 @@ def test_switcher_drains_esc_before_loop():
     assert switcher.index("keyboardDrainBack()") < switcher.index("while (true)")
 
 
-def test_keyboard_drain_back_helper():
+def test_switcher_confirm_uses_keysstate_enter():
+    text = LAUNCHER_CPP.read_text(encoding="utf-8")
+    switcher = text[text.index("void LauncherMenu::showAppSwitcher") : text.index(
+        "void LauncherMenu::showInstalledApps"
+    )]
+    confirm = switcher[
+        switcher.index("keyboardDrainEnter()") : switcher.index(
+            "redrawSwitcher();", switcher.index("keyboardDrainEnter()")
+        )
+    ]
+    assert "keyboardEnterJustPressed()" in confirm
+    assert "readButtons()" not in confirm
+
+
+def test_keyboard_enter_helpers():
     text = DEVICE_H.read_text(encoding="utf-8")
+    assert "keyboardEnterJustPressed" in text
+    assert "keyboardDrainEnter" in text
     assert "keyboardDrainBack" in text

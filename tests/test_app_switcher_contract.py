@@ -10,7 +10,7 @@ DOCS = ROOT / "docs" / "APP_INSTALL.md"
 def test_app_switcher_implemented():
     text = MENU_CPP.read_text(encoding="utf-8")
     assert "showAppSwitcher" in text
-    assert "Switch app (ESC/`)" in text
+    assert "Load app (ESC/`)" in text
     assert "showAppSwitcher();" in text
     assert "Tab next" in text or "keysState().tab" in text
 
@@ -43,5 +43,5 @@ def test_load_wording_not_download_in_menu():
 def test_docs_use_load_and_esc_switcher():
     text = DOCS.read_text(encoding="utf-8")
     assert "Load from catalog" in text
-    assert "Switch app" in text
+    assert "Load app" in text
     assert "ESC" in text
