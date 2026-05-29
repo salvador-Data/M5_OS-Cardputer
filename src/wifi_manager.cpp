@@ -18,6 +18,7 @@ String wifiIpAddress() {
 bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t passLen) {
     ui::drawHeader("WiFi scan");
     m5os::lcd().setCursor(4, 24);
+    m5os::lcd().setTextColor(ui::theme().primary, TFT_BLACK);
     m5os::lcd().println("Scanning...");
     const int n = WiFi.scanNetworks();
     std::vector<String> ssids;
@@ -33,6 +34,7 @@ bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t
 
     ui::drawHeader("WiFi connect");
     m5os::lcd().setCursor(4, 30);
+    m5os::lcd().setTextColor(ui::theme().primary, TFT_BLACK);
     m5os::lcd().println(ssidOut);
     WiFi.begin(ssidOut, passOut);
     uint8_t tries = 0;

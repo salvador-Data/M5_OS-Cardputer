@@ -23,6 +23,45 @@ uint16_t lerp565(uint16_t a, uint16_t b, uint8_t t) {
     return static_cast<uint16_t>((r << 11) | (g << 5) | bl);
 }
 
+bool color565IsDark(uint16_t c) {
+    const int r = (c >> 11) & 0x1F;
+    const int g = (c >> 5) & 0x3F;
+    const int b = c & 0x1F;
+    return (r * 8 + g * 4 + b * 8) < 80;
+}
+
+uint16_t themeFieldBg() {
+    if (!color565IsDark(gTheme.secondary)) return gTheme.secondary;
+    return lerp565(TFT_BLACK, gTheme.primary, 120);
+}
+
+uint16_t themeLabelOnBlack() {
+    if (!color565IsDark(gTheme.secondary)) return gTheme.secondary;
+    return gTheme.primary;
+}
+
+void drawPasswordFrame(const char* title, size_t length) {
+    drawHeader(title);
+    auto& d = m5os::lcd();
+    const uint16_t fieldBg = themeFieldBg();
+
+    d.setTextColor(themeLabelOnBlack(), TFT_BLACK);
+    d.setCursor(4, 24);
+    d.print("Password:");
+
+    const int fieldY = 38;
+    const int fieldH = 18;
+    d.fillRect(4, fieldY - 2, d.width() - 8, fieldH, fieldBg);
+    d.setTextColor(TFT_WHITE, fieldBg);
+    d.setCursor(8, fieldY + 2);
+    d.print("Pass: ");
+    for (size_t i = 0; i < length; ++i) d.print('*');
+
+    d.setTextColor(gTheme.primary, TFT_BLACK);
+    d.setCursor(4, 66);
+    d.print("Enter save  ` cancel");
+}
+
 void playBootChime() {
     auto& spk = M5.Speaker;
     if (!spk.isEnabled()) spk.begin();
@@ -287,16 +326,13 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
     if (!out || outLen < 2) return false;
     out[0] = '\0';
     size_t length = 0;
+    size_t lastDrawnLength = SIZE_MAX;
 
     while (true) {
-        drawHeader(title);
-        m5os::lcd().setCursor(4, 28);
-        m5os::lcd().setTextColor(TFT_WHITE, TFT_BLACK);
-        m5os::lcd().print("Pass: ");
-        for (size_t i = 0; i < length; ++i) m5os::lcd().print('*');
-        m5os::lcd().setCursor(4, 64);
-        m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
-        m5os::lcd().print("Enter save  ` cancel");
+        if (length != lastDrawnLength) {
+            drawPasswordFrame(title, length);
+            lastDrawnLength = length;
+        }
 
         m5os::update();
         Buttons keys = m5os::readButtons();
