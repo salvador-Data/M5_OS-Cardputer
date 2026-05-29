@@ -23,6 +23,11 @@ inline bool isSessionSwResetExit(esp_reset_reason_t reason) {
     return reason == ESP_RST_SW;
 }
 
+/** Cardputer side reset button (EN) — external reset, not cold power-on. */
+inline bool isSessionExtResetExit(esp_reset_reason_t reason) {
+    return reason == ESP_RST_EXT;
+}
+
 /**
  * True when M5 OS home is booting after an intentional return from a loaded app.
  * Excludes cold power-on (always M5 OS home without save prompt).
@@ -34,12 +39,28 @@ inline bool shouldPromptSessionReturn(bool appSessionActive, bool sessionExitPen
     if (resetReason == ESP_RST_POWERON) return false;
     if (sessionExitPending) return true;
     if (!appSessionActive) return false;
-    return isSessionSwResetExit(resetReason) || isCrashResetReason(resetReason);
+    return isSessionSwResetExit(resetReason) || isSessionExtResetExit(resetReason) ||
+           isCrashResetReason(resetReason);
 }
 
-/** Cold power-on: restore M5 OS home otadata and drop session NVS without save prompt. */
-inline bool shouldColdBootRestoreHome(esp_reset_reason_t resetReason) {
+/** Cold power-on: restore otadata and drop session NVS without save prompt. */
+inline bool shouldPowerOnRestoreHome(esp_reset_reason_t resetReason) {
     return resetReason == ESP_RST_POWERON;
+}
+
+/** Side reset / EN button: restore otadata; session may prompt save afterward. */
+inline bool shouldExtResetRestoreHome(esp_reset_reason_t resetReason) {
+    return resetReason == ESP_RST_EXT;
+}
+
+/** Either hardware reset path that must reach M5 OS app0 (mirrored in custom bootloader). */
+inline bool shouldHardwareResetRestoreHome(esp_reset_reason_t resetReason) {
+    return shouldPowerOnRestoreHome(resetReason) || shouldExtResetRestoreHome(resetReason);
+}
+
+/** @deprecated alias — use shouldPowerOnRestoreHome / shouldHardwareResetRestoreHome */
+inline bool shouldColdBootRestoreHome(esp_reset_reason_t resetReason) {
+    return shouldPowerOnRestoreHome(resetReason);
 }
 
 /** Panic/watchdog while M5 OS or a loaded app was running — point otadata at home. */

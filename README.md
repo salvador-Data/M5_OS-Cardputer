@@ -191,7 +191,7 @@ Serial monitor at 115200 baud - JSON boot, catalog, and launch logs.
 
 1. Insert SD with apps under `/apps/<slug>/<slug>.bin`.
 2. Main menu -> **Load app (ESC/`)** -> pick app -> **Enter** to flash OTA and reboot.
-3. To return to M5 OS: hold **ESC/` at power-on** (recovery boot) or USB reflash M5 OS to **COM13**.
+3. To return to M5 OS: press the **side reset button**, **power-cycle** the device, or hold **BtnA / ESC/` while powering on**. USB reflash M5 OS to **COM13** if needed.
 
 Recent fix (28528a7): Load app uses confirm-on-Enter, phased progress bar, and on-screen errors instead of freezing the menu.
 
@@ -316,17 +316,46 @@ Shipped catalog entries link Hacker Planet apps:
 
 ---
 
-## ESC recovery and freeze handling
+## ESC recovery, session gateway, and freeze handling
+
+Partition layout (`partitions/m5os_cardputer_8MB.csv`): **app0** = M5 OS (~3.75 MiB), **app1** = **session gateway** (~448 KiB), **app2** = foreign app run slot (~3.75 MiB).
+
+**Load app** copies the `.bin` to **app2**, flashes the gateway into **app1** (from SD `/system/m5os_session_gateway.bin` or USB `scripts/flash_session_gateway.ps1`), then reboots into the gateway screen:
+
+| Gateway screen | Result |
+|----------------|--------|
+| **ESC** or **`** | Return to M5 OS → **Save files before exit?** (`y` / `n`) |
+| **Enter** (after ~1.5 s) | Boots the app in **app2** (auto-launch ~2.5 s if you wait) |
+
+Custom bootloader policy: **cold power-on** and **side reset** always boot **M5 OS (app0)** even when otadata pointed at app2. **Software reset** from Load app follows otadata (gateway first, then app after Enter).
 
 | Trigger | Result |
 |---------|--------|
-| **Reset btn / SW reset while app loaded** | OTA rollback boots M5 OS → **Save files before exit?** (`y` / `n`) → home menu |
-| **Hold ESC/` or BtnA at M5 OS boot** | 2 s recovery splash → save prompt if a session was active |
-| **Cold power switch off/on** | `applyColdBootHomeRestore()` → M5 OS home (no save prompt) |
-| **Menu watchdog (30 s)** | TWDT timeout restores home boot and reboots |
-| **USB reflash** | PlatformIO or M5Burner flash M5 OS base to **COM13** |
+| **ESC on gateway screen** | M5 OS + save prompt |
+| **ESC/` while M5 OS menu is running** | Recovery splash → home (existing) |
+| **ESC inside a loaded third-party app** | **Not available** — that firmware owns the keyboard |
+| **Side reset while app loaded** | Bootloader → M5 OS → save prompt |
+| **Cold power switch off/on** | Bootloader → M5 OS home (no save prompt) |
+| **Hold BtnA or ESC/` at power-on** | Bootloader forces M5 OS |
+| **Menu watchdog (30 s)** | TWDT restores home otadata and reboots |
 
-While a third-party app is running, **M5 OS code is not active** — arbitrary M5Burner bins cannot show an in-app ESC menu. To exit: press the **Cardputer reset button** (side) or power-cycle, then answer the save prompt when M5 OS boots. Apps that write saves to SD should use `/home/default/apps/<slug>/saves/` (prepared before launch).
+To exit a running foreign app without power-cycling: press the **Cardputer reset button** (side) or **power off/on**, then answer the save prompt when M5 OS boots. SD saves: `/home/default/apps/<slug>/saves/`.
+
+Build gateway firmware:
+
+```powershell
+cd C:\Users\Owner\Projects\M5_OS-Cardputer
+```
+
+```powershell
+.\scripts\build_session_gateway.ps1
+```
+
+Copy `data\m5os_session_gateway.bin` to the microSD folder `system\`, or flash app1 over USB:
+
+```powershell
+.\scripts\flash_session_gateway.ps1 -Port COM13
+```
 
 Menu -> **M5Burner / recovery** shows USB and on-device recovery steps.
 

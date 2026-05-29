@@ -26,6 +26,8 @@
 
 #include <nvs.h>
 
+#include <soc/rtc_cntl_reg.h>
+
 
 
 namespace m5os {
@@ -134,7 +136,7 @@ int otaIndexFromSelectEntry(const esp_ota_select_entry_t& entry, uint8_t otaAppC
 
 
 
-bool markStagedPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t targetState) {
+bool markPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t targetState) {
 
     if (!staged) return false;
 
@@ -232,6 +234,14 @@ void noteLaunchFail(const char* tag) {
 
 
 
+void setRtcBootStagedHandoff() { REG_WRITE(RTC_CNTL_STORE0_REG, kRtcBootStagedMagic); }
+
+
+
+void clearRtcBootStagedHandoff() { REG_WRITE(RTC_CNTL_STORE0_REG, 0); }
+
+
+
 void showRecoverySplashWindow() {
 
     const unsigned long deadline = millis() + 2000;
@@ -306,7 +316,7 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     // immediately revert to M5 OS before the user can use the loaded firmware.
 
-    markStagedPartitionOtaState(target, ESP_OTA_IMG_VALID);
+    markPartitionOtaState(target, ESP_OTA_IMG_VALID);
 
 
 
@@ -335,6 +345,8 @@ bool rebootIntoStagedApp(const char* phaseTag) {
     log::info("m5os_launch_reboot", String(phaseTag) + ":" + target->label);
 
     for (int i = 0; i < 20; ++i) delay(10);
+
+    setRtcBootStagedHandoff();
 
     esp_restart();
 
@@ -526,10 +538,6 @@ bool recoveryBootRequested() {
 
 
 
-const esp_partition_t* stagingOtaPartition() { return esp_ota_get_next_update_partition(nullptr); }
-
-
-
 const esp_partition_t* resolveLaunchBootPartition() {
 
     const esp_partition_t* running = esp_ota_get_running_partition();
@@ -552,17 +560,31 @@ const esp_partition_t* resolveLaunchBootPartition() {
 
 void applyColdBootHomeRestore() {
 
-    if (boot_policy::shouldColdBootRestoreHome(esp_reset_reason())) {
+    clearRtcBootStagedHandoff();
 
-        restoreBootToHome();
+    const esp_reset_reason_t reason = esp_reset_reason();
+
+    if (!boot_policy::shouldHardwareResetRestoreHome(reason)) return;
+
+
+
+    restoreBootToHome();
+
+    clearLaunchPending();
+
+
+
+    if (boot_policy::shouldPowerOnRestoreHome(reason)) {
 
         clearAppSession();
 
         clearSessionExitPending();
 
-        clearLaunchPending();
+        log::info("m5os_hw_reset_home", "poweron");
 
-        log::info("m5os_cold_boot_home", "poweron");
+    } else {
+
+        log::info("m5os_hw_reset_home", "ext");
 
     }
 
@@ -669,10 +691,6 @@ bool tryLaunchPendingHandoff() {
     return rebootIntoStagedApp("handoff");
 
 }
-
-
-
-bool launchStagedAppSession() { return rebootIntoStagedApp("direct"); }
 
 
 

@@ -12,9 +12,9 @@ LAUNCHER_HUB_CATALOG_BASE = "https://api.launcherhub.net/firmwares"
 LAUNCHER_HUB_DOWNLOAD_BASE = "https://api.launcherhub.net/download"
 M5_BURNER_CDN_BASE = "https://m5burner-cdn.m5stack.com/firmware/"
 BURNER_CATEGORY = "cardputer"
-# Smaller OTA slot in partitions/m5os_cardputer_8MB.csv (app0 = 0x3F0000).
-MAX_APP_BIN_BYTES = 0x3F0000
-MAX_OTA_APP1_BYTES = 0x400000
+# Run slot app2 in partitions/m5os_cardputer_8MB.csv.
+MAX_APP_BIN_BYTES = 0x3C0000
+MAX_OTA_APP1_BYTES = 0x3C0000
 
 FID_HEX = re.compile(r"^[0-9a-fA-F]{32}$")
 BURNER_FILE = re.compile(r"^[A-Za-z0-9._-]+\.bin$")

@@ -10,6 +10,7 @@
 
 #include <cstddef>
 
+#include <esp_ota_ops.h>
 #include <esp_partition.h>
 
 
@@ -57,7 +58,7 @@ void tryEarlyRecoveryBoot();
 
 
 
-/** On ESP_RST_POWERON only, point otadata at saved M5 OS home partition. */
+/** On cold power-on or external reset, point otadata at saved M5 OS home partition. */
 
 void applyColdBootHomeRestore();
 
@@ -141,7 +142,8 @@ bool launchStagedAppSession();
 
 const esp_partition_t* stagingOtaPartition();
 
-
+/** Mark a non-running OTA slot state in otadata (e.g. gateway or run slot). */
+bool markPartitionOtaState(const esp_partition_t* part, esp_ota_img_states_t targetState);
 
 }  // namespace m5os
 

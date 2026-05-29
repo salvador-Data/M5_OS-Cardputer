@@ -35,8 +35,8 @@ static const char* kDefaultUtmsPackUrl = M5OS_UTMS_PACK_URL;
 static const char* kAppRemotePossibility = "remote_possibility";
 static const char* kAppBleBot = "ble_bot";
 
-/** Max app .bin for SD + OTA (smaller slot in partitions/m5os_cardputer_8MB.csv). */
-static const size_t kMaxAppBinBytes = 0x3F0000;
+/** Max app .bin for SD + OTA run slot (app2 in partitions/m5os_cardputer_8MB.csv). */
+static const size_t kMaxAppBinBytes = 0x3C0000;
 
 /** M5 OS menu freeze recovery — TWDT timeout then restore home + reboot. */
 static const uint32_t kWatchdogTimeoutSec = 30;
@@ -47,5 +47,8 @@ static const int kDefaultThemePreset = 1;  // Hacker Green
 
 /** Cardputer Stamp-S3 SK6812 data pin (M5Unified rgb_led table). */
 static const int kStampLedGpio = 21;
+
+/** RTC_CNTL_STORE0 handoff token — mirrored in bootloader_components/main/bootloader_start.c */
+static const uint32_t kRtcBootStagedMagic = 0x4D354153u;
 
 }  // namespace m5os

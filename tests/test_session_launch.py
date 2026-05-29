@@ -28,15 +28,16 @@ def test_app_session_nvs_keys():
     ):
         assert sym in FLASH_H.read_text(encoding="utf-8")
         assert sym in flash
-    assert "markStagedPartitionOtaState" in flash
+    assert "markPartitionOtaState" in flash
 
 
 def test_session_marks_staged_valid_before_reboot():
     flash = FLASH_CPP.read_text(encoding="utf-8")
     fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("bool nvsSetFlag")]
-    assert "markStagedPartitionOtaState(target, ESP_OTA_IMG_VALID)" in fn
+    assert "markPartitionOtaState(target, ESP_OTA_IMG_VALID)" in fn
     assert "ESP_OTA_IMG_PENDING_VERIFY" not in fn
-    assert "clearLaunchPending()" in fn
+    assert "setRtcBootStagedHandoff()" in fn
+    assert "kRtcBootStagedMagic" in flash or "setRtcBootStagedHandoff" in flash
     assert "setAppSessionActive(true)" in flash[flash.index("void beginLaunchSession") : flash.index("void cancelLaunchSession")]
 
 
@@ -78,10 +79,16 @@ def test_ota_rollback_enabled_for_manual_sw_exit():
 
 def test_launcher_documents_reset_exit():
     text = LAUNCHER_CPP.read_text(encoding="utf-8")
-    assert "Reset=exit" in text or "saves on SD" in text
+    assert "Gateway: ESC=OS" in text or "Reset=exit" in text
+
+
+def test_launch_uses_session_gateway():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    assert "launchGatewaySession()" in text
 
 
 def test_readme_session_recovery_docs():
     readme = README.read_text(encoding="utf-8")
     assert "Save files before exit" in readme or "save prompt" in readme.lower()
     assert "reset" in readme.lower()
+    assert "session gateway" in readme.lower() or "Session gateway" in readme

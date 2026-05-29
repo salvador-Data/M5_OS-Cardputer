@@ -11,6 +11,7 @@
 #include "M5OSDevice.h"
 
 #include "m5os_flash.h"
+#include "m5os_gateway.h"
 
 #include "m5os_session.h"
 
@@ -27,8 +28,6 @@
 
 
 #include <SD.h>
-
-#include <Update.h>
 
 #include <Preferences.h>
 
@@ -209,102 +208,52 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
     LaunchProgressCtx ctx{appLabel, "Copy to run slot"};
     paintLaunchProgress(0, firmwareSize, &ctx);
 
-
-
-    if (!Update.begin(firmwareSize)) {
-
-        result.message = "Update.begin failed";
-
-        log::info("launch_begin_fail", String(Update.errorString()));
-
+    const esp_partition_t* runSlot = runSlotOtaPartition();
+    if (!runSlot || runSlot == gatewayOtaPartition()) {
+        result.message = "Run slot unavailable\nReflash M5 OS partition table";
+        log::info("launch_slot_fail", "layout");
         return false;
-
     }
-
-
+    if (firmwareSize > runSlot->size) {
+        result.message = "App too large for run slot";
+        return false;
+    }
+    if (esp_partition_erase_range(runSlot, 0, runSlot->size) != ESP_OK) {
+        result.message = "Erase run slot failed";
+        return false;
+    }
 
     uint8_t buffer[kIoChunkBytes];
-
     size_t written = 0;
-
     while (firmware.available()) {
-
         const size_t n = firmware.read(buffer, sizeof(buffer));
-
         if (n == 0) break;
-
-        if (Update.write(buffer, n) != n) {
-
-            Update.abort();
-
-            result.message = "Write failed — launcher intact";
-
+        if (esp_partition_write(runSlot, written, buffer, n) != ESP_OK) {
+            result.message = "Write failed — M5 OS intact";
             log::info("launch_write_fail");
-
             return false;
-
         }
-
         written += n;
-
         feedWatchdog();
-
         if (written == n || written % kIoChunkBytes == 0 || !firmware.available()) {
-
             paintLaunchProgress(written, firmwareSize, &ctx);
-
         }
-
     }
-
-
 
     if (written != firmwareSize) {
-
-        Update.abort();
-
         result.message = "Read incomplete " + String(written) + "/" + String(firmwareSize);
-
         log::info("launch_read_incomplete", String(written));
-
         return false;
-
     }
 
-
-
-    if (!Update.end(true)) {
-
-        result.message = "Update.end failed — launcher intact";
-
-        log::info("launch_end_fail", String(Update.errorString()));
-
+    uint8_t magic = 0;
+    if (esp_partition_read(runSlot, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
+        result.message = "Invalid app image in run slot";
+        log::info("launch_magic_fail", String(magic, HEX));
         return false;
-
     }
-
-
-
-    const esp_partition_t* staged = stagingOtaPartition();
-
-    if (staged) {
-
-        uint8_t magic = 0;
-
-        if (esp_partition_read(staged, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
-
-            result.message = "Invalid app image in run slot";
-
-            log::info("launch_magic_fail", String(magic, HEX));
-
-            return false;
-
-        }
-
-    }
-
+    markPartitionOtaState(runSlot, ESP_OTA_IMG_VALID);
     return true;
-
 }
 
 
@@ -402,16 +351,16 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
         log::info("launch_cached_ok", cacheKey);
         ui::showMessage("Load app", label + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
 
-        if (!resolveLaunchBootPartition()) {
+        if (!flashEmbeddedGatewayIfNeeded()) {
             cancelLaunchSession();
             result.ok = false;
-            result.message = "Run slot empty\nor invalid image";
-            log::info("launch_resolve_fail", "cached");
+            result.message = "Gateway missing\nAdd /system/m5os_session_gateway.bin";
+            log::info("launch_gateway_fail", "cached");
             surfaceLaunchFailure(label, result);
             return result;
         }
 
-        if (launchStagedAppSession()) return result;
+        if (launchGatewaySession()) return result;
 
         cancelLaunchSession();
         result.ok = false;
@@ -447,16 +396,16 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
     log::info("launch_ok", cacheKey);
     ui::showMessage("Load app", label + "\nRebooting...", TFT_GREEN, 1200);
 
-    if (!resolveLaunchBootPartition()) {
+    if (!flashEmbeddedGatewayIfNeeded()) {
         cancelLaunchSession();
         result.ok = false;
-        result.message = "Copy OK but run slot\ninvalid — re-copy app";
-        log::info("launch_resolve_fail", "copy");
+        result.message = "Gateway missing\nAdd /system/m5os_session_gateway.bin";
+        log::info("launch_gateway_fail", "copy");
         surfaceLaunchFailure(label, result);
         return result;
     }
 
-    if (launchStagedAppSession()) return result;
+    if (launchGatewaySession()) return result;
 
     cancelLaunchSession();
     result.ok = false;

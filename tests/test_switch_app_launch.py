@@ -157,7 +157,7 @@ def test_launch_begins_session_before_copy():
     )]
     assert "beginLaunchSession()" in helper
     assert helper.index("beginLaunchSession()") < helper.index("copySdToOta")
-    assert "resolveLaunchBootPartition()" in helper
+    assert "launchGatewaySession()" in helper
     assert "cancelLaunchSession()" in helper
 
 

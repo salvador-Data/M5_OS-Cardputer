@@ -37,9 +37,11 @@ def test_single_reboot_launch_sets_boot_partition():
     assert "restoreBootToHome()" not in fn
     assert "esp_ota_set_boot_partition(target)" in fn
     assert "m5os_launch_reboot" in fn
-    launch = flash[flash.index("bool launchStagedAppSession") : flash.index("void tryEarlyRecoveryBoot")]
-    assert "restoreBootToHome()" not in launch
-    assert "rebootIntoStagedApp" in launch
+    gateway_h = (ROOT / "include" / "m5os_gateway.h").read_text(encoding="utf-8")
+    gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
+    assert "launchGatewaySession" in gateway_h
+    assert "launchStagedAppSession() { return launchGatewaySession();" in gateway.replace("\n", " ")
+    assert "restoreBootToHome()" not in gateway[gateway.index("bool launchGatewaySession") : gateway.index("bool gatewayExitToHome")]
 
 
 def test_launch_fail_detail_wired_in_main():
@@ -57,9 +59,10 @@ def test_recovery_boot_wired_in_main():
     assert "saveHomeAppPartition()" in text
     assert "beginWatchdog()" in text
     flash = FLASH_CPP.read_text(encoding="utf-8")
-    assert "shouldColdBootRestoreHome" in flash
+    assert "shouldHardwareResetRestoreHome" in flash
     policy = (ROOT / "include" / "m5os_boot_policy.h").read_text(encoding="utf-8")
     assert "ESP_RST_POWERON" in policy
+    assert "ESP_RST_EXT" in policy
 
 
 def test_recovery_helpers_declared():
@@ -76,6 +79,7 @@ def test_recovery_helpers_declared():
         "isLaunchPending",
         "clearLaunchPending",
         "launchStagedAppSession",
+        "markPartitionOtaState",
         "tryLaunchPendingHandoff",
         "beginLaunchSession",
         "resolveLaunchBootPartition",
@@ -86,7 +90,10 @@ def test_recovery_helpers_declared():
         "isRunningHomePartition",
     ):
         assert sym in header
-        assert sym in source
+        if sym in ("launchStagedAppSession", "stagingOtaPartition"):
+            assert sym in (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
+        else:
+            assert sym in source
 
 
 def test_flash_progress_ui():

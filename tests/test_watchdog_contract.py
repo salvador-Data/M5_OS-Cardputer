@@ -39,15 +39,12 @@ def test_watchdog_uses_twdt_and_shutdown_restore():
 
 def test_launch_pending_skips_shutdown_restore_on_load_app():
     flash = FLASH_CPP.read_text(encoding="utf-8")
-    launch = flash[flash.index("bool launchStagedAppSession") : flash.index("void tryEarlyRecoveryBoot")]
-    assert "rebootIntoStagedApp" in launch
-    assert "esp_restart()" in flash[flash.index("bool rebootIntoStagedApp") : flash.index("}  // namespace", flash.index("bool rebootIntoStagedApp"))]
+    gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
+    launch = gateway[gateway.index("bool launchGatewaySession()") : gateway.index("bool gatewayExitToHome()")]
+    assert "esp_restart()" in launch
     assert "restoreBootToHome()" not in launch
-    reboot_fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("}  // namespace", flash.index("bool rebootIntoStagedApp"))]
-    assert "beginLaunchSession()" in reboot_fn
-    assert "esp_ota_set_boot_partition(target)" in reboot_fn
-    assert "restoreBootToHome()" not in reboot_fn
-    handoff = flash[flash.index("bool tryLaunchPendingHandoff") : flash.index("bool launchStagedAppSession")]
+    assert "esp_ota_set_boot_partition(gw)" in launch
+    handoff = flash[flash.index("bool tryLaunchPendingHandoff") : flash.index("void tryEarlyRecoveryBoot")]
     assert "rebootIntoStagedApp" in handoff
 
 

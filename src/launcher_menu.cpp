@@ -135,7 +135,7 @@ void LauncherMenu::showAppSwitcher() {
         m5os::lcd().print("Enter load app  Tab next");
         m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
         m5os::lcd().setCursor(4, 118);
-        m5os::lcd().print("Reset=exit  saves on SD");
+        m5os::lcd().print("Gateway: ESC=OS Enter=run");
         lastIndex = index;
         lastScroll = scroll;
     };

@@ -41,7 +41,7 @@ M5 OS launcher  ←── reflash to return   /apps/manifest.json
    - **Offline:** Copy `.bin` to SD (see paths below)
    - **PC helper:** `python scripts/import_m5burner_entry.py --bin … --name … --merge data/manifest.example.json`
 3. **Load app:** Menu → **Load app (ESC/`)** → pick app → **Enter run slot**
-4. **Return to M5 OS:** Hold **ESC/` (backtick) at power-on** for recovery boot, or USB reflash M5 OS (PlatformIO or M5Burner). App `.bin` files **stay on SD**.
+4. **Return to M5 OS:** Press the **side reset button**, **power-cycle**, or hold **BtnA / ESC/` while powering on**. Side reset shows **Save files before exit?** when a session was active. App `.bin` files **stay on SD**.
 
 Launching an app writes the SD `.bin` into the ESP32 OTA slot and reboots. M5 OS is no longer in flash until you reflash or use recovery boot — but you do **not** re-load apps from GitHub.
 
@@ -114,11 +114,11 @@ Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub o
 |-------|----------|
 | **Menu freeze** (no `m5os::update()` for **30 s**) | ESP task watchdog panic → shutdown hook restores home boot partition → auto-reboot into M5 OS main menu |
 | **M5 OS panic / watchdog reset** | `CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT` — auto-reboot; on boot `applyCrashResetHomeRestore()` points otadata at saved M5 OS home |
-| **Cold power-on** | `applyColdBootHomeRestore()` — boots M5 OS home (returns from a loaded app after unplug) |
-| **ESC/` at boot** | `tryEarlyRecoveryBoot()` — manual return to M5 OS home |
-| **Load app reboot** | `launch_pending` NVS flag skips shutdown home-restore so otadata stays on staged app |
+| **Cold power-on / side reset** | Custom bootloader always boots M5 OS (app0); `applyColdBootHomeRestore()` fixes otadata. Side reset may show save prompt |
+| **ESC/` or BtnA at boot** | Bootloader or `tryEarlyRecoveryBoot()` forces M5 OS home |
+| **Load app reboot (SW reset)** | otadata stays on staged app1 (VALID — no auto-revert) |
 
-Third-party apps that crash-loop without power-cycling may still require **unplug + power-on** or **ESC/` at M5 OS boot** — M5 OS cannot run code inside a foreign app binary.
+Third-party apps that crash-loop without hardware reset may still require **side reset**, **power-cycle**, or **BtnA at boot** — M5 OS cannot run code inside a foreign app binary.
 
 ## Security (implemented)
 
