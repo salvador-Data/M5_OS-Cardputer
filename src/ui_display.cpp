@@ -483,12 +483,6 @@ PasswordPromptResult promptPassword(char* out, size_t outLen, const char* title)
             out[length] = '\0';
             return PasswordPromptResult::Confirmed;
         }
-        if (status.del) {
-            erasePasswordChar(out, length);
-            needFullFrame = true;
-            delay(power::uiLoopDelayMs());
-            continue;
-        }
         for (auto key : status.word) {
             if (key == '`' || key == 27) {
                 out[0] = '\0';
