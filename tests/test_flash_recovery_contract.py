@@ -31,7 +31,10 @@ def test_spiffs_apps_use_sd_only_path():
 def test_recovery_boot_wired_in_main():
     text = MAIN_CPP.read_text(encoding="utf-8")
     assert "tryEarlyRecoveryBoot()" in text
+    assert "applyColdBootHomeRestore()" in text
     assert "saveHomeAppPartition()" in text
+    flash = FLASH_CPP.read_text(encoding="utf-8")
+    assert "ESP_RST_POWERON" in flash
 
 
 def test_recovery_helpers_declared():
@@ -42,6 +45,9 @@ def test_recovery_helpers_declared():
         "restoreBootToHome",
         "recoveryBootRequested",
         "tryEarlyRecoveryBoot",
+        "applyColdBootHomeRestore",
+        "launchStagedAppSession",
+        "stagingOtaPartition",
     ):
         assert sym in header
         assert sym in source

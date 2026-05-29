@@ -21,6 +21,14 @@ def test_esc_from_main_menu_opens_switcher():
     block = text[start : start + 800]
     assert "if (pick < 0)" in block
     assert "showAppSwitcher()" in block
+    assert "Exit app?" not in block
+
+
+def test_app_switcher_esc_direct_to_main_menu():
+    text = MENU_CPP.read_text(encoding="utf-8")
+    switcher = text[text.index("void LauncherMenu::showAppSwitcher") : text.index("void LauncherMenu::showInstalledApps")]
+    assert "keyboardBackJustPressed()" in switcher
+    assert 'promptYesNo("Exit app?"' not in switcher
 
 
 def test_load_wording_not_download_in_menu():

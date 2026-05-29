@@ -1,5 +1,6 @@
 #include "m5os_flash.h"
 
+#include "M5OSDevice.h"
 #include "serial_log.h"
 
 #include <M5Cardputer.h>
@@ -64,10 +65,33 @@ bool recoveryBootRequested() {
     M5Cardputer.update();
     if (!M5Cardputer.Keyboard.isPressed()) return false;
     const auto status = M5Cardputer.Keyboard.keysState();
+    for (uint8_t hid : status.hid_keys) {
+        if (hid == kHidEscape) return true;
+    }
     for (auto key : status.word) {
         if (key == '`' || key == 27) return true;
     }
     return false;
+}
+
+const esp_partition_t* stagingOtaPartition() { return esp_ota_get_next_update_partition(nullptr); }
+
+void applyColdBootHomeRestore() {
+    if (esp_reset_reason() == ESP_RST_POWERON) {
+        restoreBootToHome();
+        log::info("m5os_cold_boot_home", "poweron");
+    }
+}
+
+bool launchStagedAppSession() {
+    saveHomeAppPartition();
+    const esp_partition_t* staging = stagingOtaPartition();
+    if (!staging) return false;
+    if (esp_ota_set_boot_partition(staging) != ESP_OK) return false;
+    log::info("m5os_launch_staged", staging->label);
+    delay(200);
+    esp_restart();
+    return true;
 }
 
 void tryEarlyRecoveryBoot() {

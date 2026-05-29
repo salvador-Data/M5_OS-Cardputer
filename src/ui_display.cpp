@@ -931,8 +931,12 @@ YesNoKey pollYesNoKey() {
     if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) return YesNoKey::None;
     auto status = M5Cardputer.Keyboard.keysState();
     for (auto key : status.word) {
-        if (key == 'y' || key == 'Y') return YesNoKey::Yes;
-        if (key == 'n' || key == 'N') return YesNoKey::No;
+        if (key == 'y') return YesNoKey::Yes;
+        if (key == 'n') return YesNoKey::No;
+        if (key == '`' || key == 27) return YesNoKey::No;
+    }
+    for (uint8_t hid : status.hid_keys) {
+        if (hid == m5os::kHidEscape) return YesNoKey::No;
     }
     return YesNoKey::None;
 }
@@ -948,16 +952,9 @@ bool promptYesNo(const char* title, const char* question) {
         d.println(question ? question : "Continue?");
         d.setCursor(8, 56);
         d.setTextColor(gTheme.secondary, TFT_BLACK);
-        d.println("Y  yes");
-        d.println("N  no");
-        d.setTextColor(TFT_DARKGREY, TFT_BLACK);
-        d.setCursor(8, 92);
-        d.print("(` cancels)");
+        d.println("y yes  n no");
 
         m5os::update();
-        Buttons keys = m5os::readButtons();
-        if (keys.back) return false;
-
         switch (pollYesNoKey()) {
             case YesNoKey::Yes:
                 return true;
@@ -1027,12 +1024,7 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
         if (keys.up) index = (index > 0) ? index - 1 : static_cast<int>(items.size()) - 1;
         if (keys.down) index = (index + 1) % static_cast<int>(items.size());
         if (keys.ok) return index;
-        if (keys.back) {
-            if (backConfirmTitle && backConfirmBody) {
-                if (!promptYesNo(backConfirmTitle, backConfirmBody)) continue;
-            }
-            return -1;
-        }
+        if (keys.back || m5os::keyboardBackJustPressed()) return -1;
         delay(power::uiLoopDelayMs());
     }
 }

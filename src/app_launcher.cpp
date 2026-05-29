@@ -118,8 +118,9 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         result.message = "Rebooting into app";
         log::info("launch_cached_ok", safeBin);
         ui::showMessage("Launch", safeBin + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
-        delay(200);
-        esp_restart();
+        if (launchStagedAppSession()) return result;
+        result.ok = false;
+        result.message = "Boot staged app failed";
         return result;
     }
 
@@ -173,8 +174,9 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
     result.message = "Rebooting into app";
     log::info("launch_ok", safeBin);
     ui::showMessage("Launch", safeBin + "\nRebooting...", TFT_GREEN, 1200);
-    delay(300);
-    esp_restart();
+    if (launchStagedAppSession()) return result;
+    result.ok = false;
+    result.message = "Boot staged app failed";
     return result;
 }
 

@@ -27,6 +27,7 @@ void setup() {
     m5os::log::begin();
     m5os::begin();
     m5os::tryEarlyRecoveryBoot();
+    m5os::applyColdBootHomeRestore();
     m5os::saveHomeAppPartition();
     m5os::power::begin();
 

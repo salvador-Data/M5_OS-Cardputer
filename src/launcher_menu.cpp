@@ -127,10 +127,7 @@ void LauncherMenu::showAppSwitcher() {
                 index = (index + 1) % static_cast<int>(installed.size());
             }
         }
-        if (keys.back) {
-            if (!ui::promptYesNo("Exit app?", "Return to main menu?")) continue;
-            return;
-        }
+        if (keys.back || m5os::keyboardBackJustPressed()) return;
         if (keys.ok) {
             const auto& pkg = installed[index];
             ui::drawHeader("Launch app");
@@ -145,11 +142,9 @@ void LauncherMenu::showAppSwitcher() {
 
             while (true) {
                 m5os::update();
+                if (m5os::keyboardBackJustPressed()) break;
                 Buttons confirm = m5os::readButtons();
-                if (confirm.back) {
-                    if (!ui::promptYesNo("Exit app?", "Cancel without launching?")) continue;
-                    break;
-                }
+                if (confirm.back) break;
                 if (confirm.ok) {
                     LaunchResult result = launcher_.launchBinFile(pkg.binFile);
                     if (!result.ok) ui::showMessage("Launch failed", result.message, TFT_RED);
@@ -454,7 +449,7 @@ void LauncherMenu::runMainLoop() {
     for (auto* item : items) labels.push_back(item);
 
     while (true) {
-        const int pick = ui::selectFromList(labels, "M5 OS Main", 0, "Exit app?", "Open app switcher?");
+        const int pick = ui::selectFromList(labels, "M5 OS Main");
         if (pick < 0) {
             showAppSwitcher();
             continue;
