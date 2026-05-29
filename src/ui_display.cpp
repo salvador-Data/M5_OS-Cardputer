@@ -425,50 +425,44 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
         }
 
         m5os::update();
-        Buttons nav = readButtonsExtended();
-        if (nav.ok) {
+        if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) {
+            delay(power::uiLoopDelayMs());
+            continue;
+        }
+
+        const auto status = M5Cardputer.Keyboard.keysState();
+        if (status.enter) {
             out[length] = '\0';
             return true;
         }
-        if (nav.back) {
-            out[0] = '\0';
-            return false;
+        if (status.del && length > 0) {
+            length--;
+            out[length] = '\0';
+            needFullFrame = true;
+            delay(power::uiLoopDelayMs());
+            continue;
         }
-
-        if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
-            const auto status = M5Cardputer.Keyboard.keysState();
-            if (status.enter) {
+        for (auto key : status.word) {
+            if (key == '`' || key == 27) {
+                out[0] = '\0';
+                return false;
+            }
+            if (key == '\n' || key == '\r') {
                 out[length] = '\0';
                 return true;
             }
-            if (status.del && length > 0) {
-                length--;
-                out[length] = '\0';
+            if (key == '\b' || key == 127) {
+                if (length > 0) {
+                    length--;
+                    out[length] = '\0';
+                }
                 needFullFrame = true;
                 continue;
             }
-            for (auto key : status.word) {
-                if (key == '`' || key == 27) {
-                    out[0] = '\0';
-                    return false;
-                }
-                if (key == '\n' || key == '\r') {
-                    out[length] = '\0';
-                    return true;
-                }
-                if (key == '\b' || key == 127) {
-                    if (length > 0) {
-                        length--;
-                        out[length] = '\0';
-                    }
-                    needFullFrame = true;
-                    continue;
-                }
-                if (length < outLen - 1 && key >= 32 && key <= 126) {
-                    out[length++] = static_cast<char>(key);
-                    out[length] = '\0';
-                    needFullFrame = true;
-                }
+            if (length < outLen - 1 && key >= 32 && key <= 126) {
+                out[length++] = static_cast<char>(key);
+                out[length] = '\0';
+                needFullFrame = true;
             }
         }
         delay(power::uiLoopDelayMs());
