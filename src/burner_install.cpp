@@ -25,6 +25,7 @@ String httpGetPayload(const String& url) {
     HTTPClient http;
     http.begin(url);
     http.setTimeout(20000);
+    applyBurnerDownloadHeaders(http, url);
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
         http.end();
@@ -36,25 +37,6 @@ String httpGetPayload(const String& url) {
     return payload;
 }
 
-String urlEncodeQueryValue(const String& raw) {
-    String out;
-    out.reserve(raw.length() * 3);
-    for (size_t i = 0; i < raw.length(); ++i) {
-        const char c = raw[i];
-        const bool safe =
-            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
-            c == '_' || c == '.' || c == '~';
-        if (safe) {
-            out += c;
-        } else {
-            char hex[4];
-            snprintf(hex, sizeof(hex), "%%%02X", static_cast<unsigned char>(c));
-            out += hex;
-        }
-    }
-    return out;
-}
-
 bool parseVersionObject(JsonObject versionObj, BurnerVersionInfo& info) {
     const String version = versionObj["version"] | "";
     const String file = security::sanitizeBurnerFile(versionObj["file"] | "");
@@ -63,7 +45,11 @@ bool parseVersionObject(JsonObject versionObj, BurnerVersionInfo& info) {
     info.file = file;
     info.appOffset = versionObj["ao"] | 0;
     info.appSize = versionObj["as"] | 0;
-    info.noBootloader = versionObj["nb"] | false;
+    if (versionObj["nb"].isNull()) {
+        info.noBootloader = info.appOffset == 0;
+    } else {
+        info.noBootloader = versionObj["nb"] | false;
+    }
     return true;
 }
 
@@ -115,7 +101,6 @@ bool fillPlanDownloadUrl(BurnerInstallPlan& plan) {
 }
 
 bool finalizePlanSize(BurnerInstallPlan& plan) {
-    if (plan.requiresExtraPartitions) return false;
     if (plan.appSize == 0) {
         if (!plan.noBootloader && plan.appOffset == 0) return false;
         plan.noBootloader = true;
@@ -134,6 +119,7 @@ bool probeRemoteSize(const String& url, size_t& totalSize) {
     HTTPClient http;
     http.begin(url);
     http.setTimeout(15000);
+    applyBurnerDownloadHeaders(http, url);
     http.addHeader("Range", "bytes=0-0");
     const int code = http.GET();
     const String contentRange = http.header("Content-Range");
@@ -176,6 +162,7 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
     HTTPClient http;
     http.begin(url);
     http.setTimeout(30000);
+    applyBurnerDownloadHeaders(http, url);
     const uint32_t endByte = offset + static_cast<uint32_t>(imageSize) - 1;
     http.addHeader("Range", "bytes=" + String(offset) + "-" + String(endByte));
     const int code = http.GET();
@@ -253,17 +240,19 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
     plan.fid = security::normalizeBurnerFid(fid);
     if (!plan.fid.length() || WiFi.status() != WL_CONNECTED) return false;
 
-    const String encodedVersion = urlEncodeQueryValue(version);
-    const String detailUrl =
-        String(kLauncherHubCatalogBase) + "?fid=" + plan.fid + "&version=" + encodedVersion;
-    const String detailPayload = httpGetPayload(detailUrl);
-
     bool parsed = false;
-    if (detailPayload.length()) {
-        JsonDocument detail;
-        if (!deserializeJson(detail, detailPayload)) {
-            JsonObject root = detail.as<JsonObject>();
-            parsed = parseInstallManifest(root, version, plan);
+    if (version.length()) {
+        const String encodedVersion = urlEncodeQueryComponent(version);
+        const String detailUrl =
+            String(kLauncherHubCatalogBase) + "?fid=" + plan.fid + "&version=" + encodedVersion;
+        const String detailPayload = httpGetPayload(detailUrl);
+
+        if (detailPayload.length()) {
+            JsonDocument detail;
+            if (!deserializeJson(detail, detailPayload)) {
+                JsonObject root = detail.as<JsonObject>();
+                parsed = parseInstallManifest(root, version, plan);
+            }
         }
     }
 

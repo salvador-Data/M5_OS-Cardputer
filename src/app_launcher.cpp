@@ -127,7 +127,11 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
     burner::BurnerInstallPlan plan;
     const String pickVersion = version.length() ? version : pkg.version;
     if (!burner::buildInstallPlan(pkg.fid, pickVersion == "burner" ? "" : pickVersion, plan)) {
-        result.message = "Install info failed";
+        if (plan.appSize > kMaxAppBinBytes) {
+            result.message = "App too large for OTA slot";
+        } else {
+            result.message = "Install info failed";
+        }
         log::info("burner_plan_fail", pkg.name);
         return result;
     }

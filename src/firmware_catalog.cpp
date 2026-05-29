@@ -312,6 +312,7 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkgIn) {
     HTTPClient http;
     http.begin(pkg.url);
     http.setTimeout(20000);
+    burner::applyBurnerDownloadHeaders(http, pkg.url);
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
         http.end();

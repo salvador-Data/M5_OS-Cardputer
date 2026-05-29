@@ -21,6 +21,7 @@ String httpGetPayload(const String& url) {
     HTTPClient http;
     http.begin(url);
     http.setTimeout(15000);
+    applyBurnerDownloadHeaders(http, url);
     const int code = http.GET();
     if (code != HTTP_CODE_OK) {
         http.end();
@@ -31,6 +32,46 @@ String httpGetPayload(const String& url) {
     http.end();
     return payload;
 }
+
+}  // namespace
+
+String urlEncodeQueryComponent(const String& raw) {
+    String out;
+    out.reserve(raw.length() * 3);
+    for (size_t i = 0; i < raw.length(); ++i) {
+        const char c = raw[i];
+        const bool safe =
+            (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' ||
+            c == '_' || c == '.' || c == '~';
+        if (safe) {
+            out += c;
+        } else {
+            char hex[4];
+            snprintf(hex, sizeof(hex), "%%%02X", static_cast<unsigned char>(c));
+            out += hex;
+        }
+    }
+    return out;
+}
+
+String burnerWifiHwid() {
+    if (WiFi.status() != WL_CONNECTED) return "";
+    String mac = WiFi.macAddress();
+    mac.toUpperCase();
+    return mac;
+}
+
+bool isLauncherHubDownloadUrl(const String& url) {
+    return url.startsWith(String(kLauncherHubDownloadBase));
+}
+
+void applyBurnerDownloadHeaders(HTTPClient& http, const String& url) {
+    if (!isLauncherHubDownloadUrl(url)) return;
+    const String hwid = burnerWifiHwid();
+    if (hwid.length()) http.addHeader("HWID", hwid);
+}
+
+namespace {
 
 bool parseVersionPayload(const String& payload, FirmwarePackage& pkg) {
     JsonDocument doc;
@@ -66,7 +107,8 @@ String resolveDownloadUrl(const String& fid, const String& file) {
     const String fileUrl = resolveFileUrl(file);
     if (!fileUrl.length()) return "";
     if (!safeFid.length()) return fileUrl;
-    String url = String(kLauncherHubDownloadBase) + "?fid=" + safeFid + "&file=" + fileUrl;
+    String url = String(kLauncherHubDownloadBase) + "?fid=" + safeFid + "&file=" +
+                 urlEncodeQueryComponent(fileUrl);
     if (!security::isAllowedHttpsUrl(url)) return "";
     return url;
 }

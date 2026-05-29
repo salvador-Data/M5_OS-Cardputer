@@ -88,13 +88,99 @@ class BurnerInstallPlan:
 
 def parse_version_entry(entry: dict[str, Any]) -> dict[str, Any]:
     """Mirror Boris loopVersions ao/as/nb fields."""
+    app_offset = int(entry.get("ao") or 0)
+    app_size = int(entry.get("as") or 0)
+    if "nb" in entry:
+        no_bootloader = bool(entry.get("nb"))
+    else:
+        no_bootloader = app_offset == 0
     return {
         "version": str(entry.get("version", "")).strip(),
         "file": sanitize_burner_file(str(entry.get("file", ""))),
-        "app_offset": int(entry.get("ao") or 0),
-        "app_size": int(entry.get("as") or 0),
-        "no_bootloader": bool(entry.get("nb")),
+        "app_offset": app_offset,
+        "app_size": app_size,
+        "no_bootloader": no_bootloader,
     }
+
+
+def is_launcherhub_download_url(url: str) -> bool:
+    return url.startswith(LAUNCHER_HUB_DOWNLOAD_BASE)
+
+
+def parse_content_range_total(content_range: str) -> int:
+    """Mirror burner_install.cpp Content-Range total size parsing."""
+    slash = content_range.rfind("/")
+    if slash < 0 or slash + 1 >= len(content_range):
+        return 0
+    try:
+        total = int(content_range[slash + 1 :])
+    except ValueError:
+        return 0
+    return total if total > 0 else 0
+
+
+def finalize_plan_size(plan: BurnerInstallPlan) -> bool:
+    """Mirror finalizePlanSize — SPIFFS/FAT flagged but not rejected here."""
+    if plan.app_size == 0:
+        if not plan.no_bootloader and plan.app_offset == 0:
+            return False
+        plan.no_bootloader = True
+    if plan.app_size > MAX_APP_BIN_BYTES:
+        return False
+    return bool(plan.download_url)
+
+
+def build_install_plan(
+    fid: str,
+    version: str = "",
+    *,
+    detail: dict[str, Any] | None = None,
+    version_list: dict[str, Any] | None = None,
+) -> BurnerInstallPlan | None:
+    """Mirror buildInstallPlan (manifest first, version list fallback)."""
+    safe_fid = normalize_fid(fid)
+    parsed: BurnerInstallPlan | None = None
+
+    if version and detail is not None:
+        try:
+            parsed = parse_install_manifest(detail, version)
+        except ValueError:
+            parsed = None
+
+    if parsed is None and version_list is not None:
+        versions = version_list.get("versions") or []
+        if not isinstance(versions, list) or not versions:
+            return None
+        pick: dict[str, Any] | None = None
+        for entry in versions:
+            if not isinstance(entry, dict):
+                continue
+            entry_version = str(entry.get("version", "")).strip()
+            if version and entry_version != version:
+                continue
+            pick = entry
+            break
+        if pick is None:
+            pick = versions[0]
+        meta = parse_version_entry(pick)
+        parsed = BurnerInstallPlan(
+            fid=safe_fid,
+            version=meta["version"],
+            file=meta["file"],
+            download_url=resolve_download_url(safe_fid, meta["file"]),
+            app_offset=meta["app_offset"],
+            app_size=meta["app_size"],
+            no_bootloader=meta["no_bootloader"],
+        )
+
+    if parsed is None:
+        return None
+
+    if parsed.app_size == 0 and parsed.no_bootloader:
+        return None
+    if not finalize_plan_size(parsed):
+        return None
+    return parsed
 
 
 def parse_install_manifest(detail: dict[str, Any], version: str = "") -> BurnerInstallPlan:
