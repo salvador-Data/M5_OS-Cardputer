@@ -8,8 +8,8 @@
 namespace m5os::ui {
 
 struct Theme {
-    uint16_t primary = 0x07E0;    // Hacker Green default
-    uint16_t secondary = 0x0320;
+    uint16_t primary = 0x07E0;    // Hacker Green default (matrix bright)
+    uint16_t secondary = 0x0660;  // dim green readable on black
 };
 
 enum class BootStage { MountSd, LoadManifest, GcScan, Ready };

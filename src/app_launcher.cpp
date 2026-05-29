@@ -79,6 +79,27 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         return result;
     }
 
+    if (const FirmwarePackage* meta = catalog_.findByBinFile(safeBin)) {
+        if (meta->needsFlashSpiffs) {
+            result.message =
+                "Needs SPIFFS on flash.\nUse M5Burner USB\nfull flash to run.\n(App on SD OK)";
+            log::info("launch_spiffs_blocked", safeBin);
+            return result;
+        }
+        if (meta->fid.length() && WiFi.status() == WL_CONNECTED) {
+            burner::BurnerInstallPlan plan;
+            String version = meta->version;
+            if (version == "burner" || !version.length()) version = "";
+            if (burner::buildInstallPlan(meta->fid, version, plan) &&
+                burner::planRequiresSdOnly(plan)) {
+                result.message =
+                    "Needs SPIFFS on flash.\nUse M5Burner USB\nfull flash to run.\n(App on SD OK)";
+                log::info("launch_spiffs_blocked", safeBin);
+                return result;
+            }
+        }
+    }
+
     File firmware = SD.open(path.c_str());
     if (!firmware) {
         result.message = "Cannot open bin";
@@ -227,7 +248,11 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
     const burner::BurnerFlashResult flash = burner::flashAppToOta(plan, sdPath);
     result.ok = flash.ok;
     result.message = flash.message;
-    if (flash.ok) catalog_.scanInstalled();
+    if (flash.ok) {
+        catalog_.markNeedsFlashSpiffs(pkg.fid, pkg.name,
+                                      plan.requiresFlashAssets || !plan.dataSlices.empty());
+        catalog_.scanInstalled();
+    }
     return result;
 }
 

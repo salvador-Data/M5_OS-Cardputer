@@ -94,6 +94,7 @@ class BurnerInstallPlan:
     app_size: int = 0
     no_bootloader: bool = False
     from_manifest: bool = False
+    requires_flash_assets: bool = False
     data_slices: list[BurnerDataSlice] = field(default_factory=list)
 
 
@@ -207,6 +208,7 @@ def parse_install_manifest(detail: dict[str, Any], version: str = "") -> BurnerI
     app_offset = 0
     app_size = 0
     no_bootloader = True
+    requires_flash_assets = False
     data_slices: list[BurnerDataSlice] = []
 
     install = version_obj.get("install") or {}
@@ -223,6 +225,7 @@ def parse_install_manifest(detail: dict[str, Any], version: str = "") -> BurnerI
                     continue
                 ptype = str(part.get("type", ""))
                 subtype = str(part.get("subtype", ""))
+                required = bool(part.get("required"))
                 if ptype == "app" and subtype == "ota":
                     app_offset = int(part.get("source_offset") or app_offset)
                     app_size = int(part.get("copy_size") or app_size)
@@ -238,6 +241,9 @@ def parse_install_manifest(detail: dict[str, Any], version: str = "") -> BurnerI
                                 copy_size=copy_size,
                             )
                         )
+                        requires_flash_assets = True
+                    elif required:
+                        requires_flash_assets = True
 
     if app_size > MAX_OTA_APP1_BYTES:
         raise ValueError("app slice exceeds M5 OS OTA limit")
@@ -251,5 +257,6 @@ def parse_install_manifest(detail: dict[str, Any], version: str = "") -> BurnerI
         app_size=app_size,
         no_bootloader=no_bootloader,
         from_manifest=True,
+        requires_flash_assets=requires_flash_assets,
         data_slices=data_slices,
     )

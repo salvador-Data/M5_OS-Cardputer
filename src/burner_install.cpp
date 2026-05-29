@@ -21,7 +21,17 @@ namespace {
 
 constexpr uint32_t kCatalogHttpTimeoutMs = 20000;
 constexpr uint32_t kDownloadHttpTimeoutMs = 60000;
+constexpr uint32_t kStreamIdleMinMs = 120000;
+constexpr uint32_t kStreamIdleMaxMs = 300000;
 constexpr uint8_t kHttpMaxAttempts = 3;
+
+uint32_t streamIdleTimeoutMs(size_t imageSize) {
+    // ~1 ms idle budget per 32 bytes — Bruce ~4 MB needs several minutes on slow WiFi.
+    const uint32_t scaled = static_cast<uint32_t>(imageSize / 32U);
+    if (scaled < kStreamIdleMinMs) return kStreamIdleMinMs;
+    if (scaled > kStreamIdleMaxMs) return kStreamIdleMaxMs;
+    return scaled;
+}
 
 String formatHttpStageError(const char* stage, int code) {
     String msg = stage;
@@ -94,13 +104,21 @@ bool parseVersionObject(JsonObject versionObj, BurnerVersionInfo& info) {
 
 void appendDataSlice(BurnerInstallPlan& plan, JsonObject part) {
     const uint32_t copySize = part["copy_size"] | 0;
-    if (copySize == 0) return;
+    const String subtype = String(part["subtype"] | "");
+    const bool required = part["required"] | false;
+    if (copySize == 0) {
+        if (required && (subtype == "spiffs" || subtype == "fat")) {
+            plan.requiresFlashAssets = true;
+        }
+        return;
+    }
     BurnerDataSlice slice;
-    slice.subtype = String(part["subtype"] | "");
+    slice.subtype = subtype;
     slice.label = String(part["label"] | "");
     slice.sourceOffset = part["source_offset"] | 0;
     slice.copySize = copySize;
     plan.dataSlices.push_back(slice);
+    if (subtype == "spiffs" || subtype == "fat") plan.requiresFlashAssets = true;
 }
 
 bool parseInstallManifest(JsonObject detail, const String& version, BurnerInstallPlan& plan) {
@@ -115,6 +133,7 @@ bool parseInstallManifest(JsonObject detail, const String& version, BurnerInstal
     plan.appSize = 0;
     plan.noBootloader = true;
     plan.dataSlices.clear();
+    plan.requiresFlashAssets = false;
     plan.fromManifest = true;
 
     JsonObject install = versionObj["install"].as<JsonObject>();
@@ -214,10 +233,6 @@ struct RangeStreamResult {
 void reportStreamProgress(size_t written, size_t total, const char* label,
                           const char* detailLine, size_t* lastPainted) {
     if (!label || total == 0) return;
-    const bool atStart = written == 0;
-    const bool atEnd = written >= total;
-    const bool interval = written > 0 && (written % 512 == 0);
-    if (!atStart && !atEnd && !interval) return;
     if (lastPainted && *lastPainted == written) return;
     if (lastPainted) *lastPainted = written;
 
@@ -257,6 +272,7 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
     uint8_t buffer[512];
     uint32_t idleMs = 0;
     reportStreamProgress(0, imageSize, progressLabel, detailLine, &lastPainted);
+    const uint32_t idleLimitMs = streamIdleTimeoutMs(imageSize);
     while (written < imageSize) {
         if (WiFi.status() != WL_CONNECTED) break;
         const size_t avail = stream->available();
@@ -264,7 +280,8 @@ RangeStreamResult streamRangeToFile(const String& url, uint32_t offset, size_t i
             if (!stream->connected() && !stream->available()) break;
             delay(1);
             idleMs += 1;
-            if (idleMs > kDownloadHttpTimeoutMs) break;
+            if (idleMs % 16 == 0) m5os::update();
+            if (idleMs > idleLimitMs) break;
             continue;
         }
         idleMs = 0;
@@ -314,6 +331,7 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
     uint32_t idleMs = 0;
     size_t lastPainted = SIZE_MAX;
     reportStreamProgress(0, imageSize, progressLabel, detailLine, &lastPainted);
+    const uint32_t idleLimitMs = streamIdleTimeoutMs(imageSize);
     while (ctx.written < imageSize) {
         if (WiFi.status() != WL_CONNECTED) break;
         const size_t avail = stream->available();
@@ -321,7 +339,8 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
             if (!stream->connected() && !stream->available()) break;
             delay(1);
             idleMs += 1;
-            if (idleMs > kDownloadHttpTimeoutMs) break;
+            if (idleMs % 16 == 0) m5os::update();
+            if (idleMs > idleLimitMs) break;
             continue;
         }
         idleMs = 0;
@@ -367,6 +386,7 @@ bool applyVersionInfo(const BurnerVersionInfo& info, BurnerInstallPlan& plan) {
     plan.appSize = info.appSize;
     plan.noBootloader = info.noBootloader;
     plan.fromManifest = false;
+    plan.requiresFlashAssets = false;
     plan.dataSlices.clear();
     return true;
 }
@@ -391,6 +411,7 @@ bool fetchInstallManifest(const String& fid, const String& version, BurnerInstal
 }  // namespace
 
 bool planRequiresSdOnly(const BurnerInstallPlan& plan) {
+    if (plan.requiresFlashAssets) return true;
     if (!plan.dataSlices.empty()) return true;
     if (plan.appOffset > 0 && !plan.noBootloader) return true;
     return false;
@@ -489,9 +510,15 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
         result.ok = saved.ok;
         if (saved.ok) {
             result.savedExtraToSd = !plan.dataSlices.empty();
-            result.message =
-                "Saved to SD. Needs SPIFFS/LittleFS — use M5Burner USB full flash to run. "
-                "M5 OS stays active.";
+            if (plan.requiresFlashAssets) {
+                result.message =
+                    "App saved to SD.\nNeeds SPIFFS on flash —\nuse M5Burner USB full flash.\n"
+                    "Load app blocked here.";
+            } else {
+                result.message =
+                    "Saved to SD. Needs SPIFFS/LittleFS — use M5Burner USB full flash to run. "
+                    "M5 OS stays active.";
+            }
         } else {
             result.message = saved.message.length() ? saved.message : "Load failed";
         }
@@ -629,7 +656,10 @@ BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const Strin
     }
 
     result.ok = true;
-    result.message = "Saved to SD";
+    result.requiresFlashAssets = plan.requiresFlashAssets;
+    result.message = plan.requiresFlashAssets
+                         ? "App saved to SD.\nNeeds SPIFFS on flash —\nuse M5Burner USB full flash."
+                         : "Saved to SD";
     log::info("burner_download_ok", plan.version);
     ui::showFlashProgress(100, "Loading", result.message);
     return result;

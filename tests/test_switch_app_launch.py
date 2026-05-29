@@ -55,3 +55,13 @@ def test_keyboard_enter_helpers():
     assert "keyboardEnterJustPressed" in text
     assert "keyboardDrainEnter" in text
     assert "keyboardDrainBack" in text
+
+
+def test_launch_blocks_spiffs_apps():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    fn = text[text.index("LaunchResult AppLauncher::launchBinFile") : text.index(
+        "LaunchResult AppLauncher::flashBurnerPackage"
+    )]
+    assert "needsFlashSpiffs" in fn
+    assert "planRequiresSdOnly" in fn
+    assert "launch_spiffs_blocked" in fn

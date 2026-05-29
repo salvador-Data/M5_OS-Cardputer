@@ -345,6 +345,12 @@ bool FirmwareCatalog::downloadPackage(const FirmwarePackage& pkgIn) {
             log::info("burner_download_fail", pkg.name);
             return false;
         }
+        for (auto& entry : available_) {
+            if ((pkg.fid.length() && entry.fid == pkg.fid) || entry.name == pkg.name) {
+                entry.needsFlashSpiffs = burned.requiresFlashAssets;
+                break;
+            }
+        }
         scanInstalled();
         log::info("package_installed", pkg.name);
         return SD.exists(path.c_str());
@@ -456,6 +462,15 @@ const FirmwarePackage* FirmwareCatalog::findByBinFile(const String& binFile) con
         if (pkg.binFile == safe) return &pkg;
     }
     return nullptr;
+}
+
+void FirmwareCatalog::markNeedsFlashSpiffs(const String& fid, const String& name, bool value) {
+    for (auto& entry : available_) {
+        if ((fid.length() && entry.fid == fid) || entry.name == name) {
+            entry.needsFlashSpiffs = value;
+            return;
+        }
+    }
 }
 
 }  // namespace m5os

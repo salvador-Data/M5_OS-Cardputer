@@ -149,6 +149,8 @@ def test_bruce_live_manifest_fits_ota_slot() -> None:
     assert plan is not None
     assert plan.app_size <= MAX_OTA_APP1_BYTES
     assert plan.app_size == detail["version"]["install"]["app"]["image_size"]
+    assert plan.requires_flash_assets is True
+    assert len(plan.data_slices) == 0
 
 
 def test_build_install_plan_empty_version_uses_version_list() -> None:

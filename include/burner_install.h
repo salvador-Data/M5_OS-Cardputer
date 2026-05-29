@@ -32,6 +32,8 @@ struct BurnerInstallPlan {
     uint32_t appSize = 0;
     bool noBootloader = false;
     bool fromManifest = false;
+    /** SPIFFS/LittleFS on device flash (M5 OS has no SPIFFS partition). */
+    bool requiresFlashAssets = false;
     std::vector<BurnerDataSlice> dataSlices;
 };
 
@@ -47,6 +49,7 @@ struct BurnerDownloadResult {
     String message;
     int httpCode = 0;
     String stage;
+    bool requiresFlashAssets = false;
 };
 
 /** List published versions for a LauncherHub firmware id. */

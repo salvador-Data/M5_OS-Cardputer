@@ -706,7 +706,7 @@ void drawIntroFrame(Display& d, int frame, int totalFrames) {
 
 void playHackerPlanetIntro() {
     auto& lcd = m5os::lcd();
-    constexpr int kFrames = 60;
+    constexpr int kIntroFrames = 110;  // ~6.4s with chime (~3s longer than 60 frames)
     prepareIntroJoke();
     lgfx::LGFX_Sprite canvas(&lcd);
     const bool buffered = canvas.createSprite(lcd.width(), lcd.height()) != nullptr;
@@ -715,13 +715,13 @@ void playHackerPlanetIntro() {
     const char* wavPath = power::allowBootChime() ? resolveBootWavPath() : nullptr;
     const bool useWav = wavPath && wav.begin(wavPath);
 
-    for (int frame = 0; frame < kFrames; ++frame) {
+    for (int frame = 0; frame < kIntroFrames; ++frame) {
         m5os::update();
         if (buffered) {
-            drawIntroFrame(canvas, frame, kFrames);
+            drawIntroFrame(canvas, frame, kIntroFrames);
             canvas.pushSprite(0, 0);
         } else {
-            drawIntroFrame(lcd, frame, kFrames);
+            drawIntroFrame(lcd, frame, kIntroFrames);
         }
 
         const unsigned long frameMs = introFrameDelayMs();
@@ -793,6 +793,9 @@ void showBootFrame(int percent, const char* label, const String& detail, uint8_t
 
 }  // namespace
 
+static lgfx::LGFX_Sprite* gFlashProgressSprite = nullptr;
+static bool gFlashProgressSpriteReady = false;
+
 static void drawFlashProgressFrame(lgfx::LovyanGFX& d, int percent, const char* label,
                                    const String& detail) {
     Theme& t = theme();
@@ -808,32 +811,39 @@ static void drawFlashProgressFrame(lgfx::LovyanGFX& d, int percent, const char* 
     const int barH = 10;
     d.drawRect(barX, barY, barW, barH, t.secondary);
     const int clamped = max(0, min(100, percent));
-    const int fillW = max(1, (barW - 2) * clamped / 100);
-    d.fillRect(barX + 1, barY + 1, fillW, barH - 2, t.primary);
+    if (clamped > 0) {
+        const int fillW = max(1, (barW - 2) * clamped / 100);
+        d.fillRect(barX + 1, barY + 1, fillW, barH - 2, t.primary);
+    }
 
-    d.setTextColor(TFT_WHITE, TFT_BLACK);
+    d.setTextColor(t.primary, TFT_BLACK);
     d.setCursor(10, 72);
     d.printf("%d%%", clamped);
 
     if (detail.length()) {
-        d.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        d.setTextColor(themeHintOnBlack(), TFT_BLACK);
         d.setCursor(10, 86);
         d.println(detail);
     }
 
     d.drawFastHLine(0, d.height() - 14, d.width(), t.primary);
     d.setCursor(6, d.height() - 12);
-    d.setTextColor(t.secondary, TFT_BLACK);
+    d.setTextColor(themeHintOnBlack(), TFT_BLACK);
     d.print("Authorized lab use only");
 }
 
 void showFlashProgress(int percent, const char* label, const String& detail) {
     auto& lcd = m5os::lcd();
-    lgfx::LGFX_Sprite canvas(&lcd);
-    if (canvas.createSprite(lcd.width(), lcd.height())) {
-        drawFlashProgressFrame(canvas, percent, label, detail);
-        canvas.pushSprite(0, 0);
-        canvas.deleteSprite();
+    if (!gFlashProgressSprite) {
+        gFlashProgressSprite = new lgfx::LGFX_Sprite(&lcd);
+    }
+    if (!gFlashProgressSpriteReady) {
+        gFlashProgressSpriteReady =
+            gFlashProgressSprite->createSprite(lcd.width(), lcd.height()) != nullptr;
+    }
+    if (gFlashProgressSpriteReady) {
+        drawFlashProgressFrame(*gFlashProgressSprite, percent, label, detail);
+        gFlashProgressSprite->pushSprite(0, 0);
         return;
     }
     drawFlashProgressFrame(lcd, percent, label, detail);
@@ -850,7 +860,7 @@ void setThemePreset(int preset) {
     switch (preset) {
         case 1:
             gTheme.primary = 0x07E0;
-            gTheme.secondary = 0x0320;
+            gTheme.secondary = 0x0660;
             break;
         case 2:
             gTheme.primary = 0xF800;
@@ -893,7 +903,7 @@ void showMessage(const char* title, const String& body, uint16_t color, unsigned
     d.setCursor(4, 8);
     d.println(title);
     d.setCursor(4, 28);
-    d.setTextColor(gTheme.secondary, TFT_BLACK);
+    d.setTextColor(themeHintOnBlack(), TFT_BLACK);
     d.println(body);
     delay(holdMs);
 }
@@ -962,7 +972,7 @@ bool promptYesNo(const char* title, const char* question) {
         d.setCursor(8, 30);
         d.println(question ? question : "Continue?");
         d.setCursor(8, 56);
-        d.setTextColor(gTheme.secondary, TFT_BLACK);
+        d.setTextColor(themeHintOnBlack(), TFT_BLACK);
         d.println("y yes  n no");
 
         m5os::update();
@@ -1003,10 +1013,10 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
             if (i >= static_cast<int>(items.size())) continue;
             m5os::lcd().setCursor(8, y);
             if (i == index) {
-                m5os::lcd().setTextColor(gTheme.primary, gTheme.secondary);
+                m5os::lcd().setTextColor(gTheme.primary, lerp565(TFT_BLACK, gTheme.primary, 72));
                 m5os::lcd().printf("> %s", items[i].c_str());
             } else {
-                m5os::lcd().setTextColor(gTheme.secondary, TFT_BLACK);
+                m5os::lcd().setTextColor(themeHintOnBlack(), TFT_BLACK);
                 m5os::lcd().printf("  %s", items[i].c_str());
             }
         }

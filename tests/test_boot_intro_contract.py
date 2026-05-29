@@ -66,6 +66,11 @@ def test_boot_jokes_count_at_least_fifty():
     assert len(jokes) >= 50, f"expected >= 50 jokes, found {len(jokes)}"
 
 
+def test_boot_intro_duration_extended():
+    text = UI_CPP.read_text(encoding="utf-8")
+    assert "constexpr int kIntroFrames = 110" in text
+
+
 def test_boot_intro_mask_uses_polygon_silhouette_not_ellipse():
     text = UI_CPP.read_text(encoding="utf-8")
     fn_start = text.index("void drawGuyFawkesMask")

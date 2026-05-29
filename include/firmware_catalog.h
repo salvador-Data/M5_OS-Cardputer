@@ -17,6 +17,8 @@ struct FirmwarePackage {
     String binFile;  // SD filename without path, e.g. ble_bot.bin
     String sha256;   // optional lowercase hex digest
     bool installed = false;
+    /** Bruce-style composite: app on SD OK, launch needs M5Burner USB SPIFFS flash. */
+    bool needsFlashSpiffs = false;
 };
 
 class FirmwareCatalog {
@@ -37,6 +39,7 @@ public:
     String binPathForPackage(const FirmwarePackage& pkg) const;
     std::vector<String> whitelistedAppSlugs() const;
     static String slugToBinFile(const String& name);
+    void markNeedsFlashSpiffs(const String& fid, const String& name, bool value);
 
 private:
     void mergeInstalledFlags();

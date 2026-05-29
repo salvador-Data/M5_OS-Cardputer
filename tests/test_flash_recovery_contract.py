@@ -24,8 +24,9 @@ def test_catalog_flash_does_not_auto_reboot():
 def test_spiffs_apps_use_sd_only_path():
     text = BURNER_CPP.read_text(encoding="utf-8")
     assert "planRequiresSdOnly" in text
+    assert "requiresFlashAssets" in text
     assert "downloadPlanToSd(plan, sdPath)" in text
-    assert "Needs SPIFFS/LittleFS" in text
+    assert "Needs SPIFFS" in text
 
 
 def test_recovery_boot_wired_in_main():
@@ -63,13 +64,16 @@ def test_flash_progress_ui():
     assert "showFlashProgress" in UI_H.read_text(encoding="utf-8")
     ui = UI_CPP.read_text(encoding="utf-8")
     assert "drawFlashProgressFrame" in ui
-    assert "LGFX_Sprite" in ui[ui.index("void showFlashProgress") : ui.index("Theme& theme()")]
+    assert "gFlashProgressSprite" in ui
+    assert "pushSprite" in ui[ui.index("void showFlashProgress") : ui.index("Theme& theme()")]
 
 
 def test_burner_streams_report_progress():
     text = BURNER_CPP.read_text(encoding="utf-8")
     assert "showFlashProgress" in text
     assert "reportStreamProgress" in text
+    assert "streamIdleTimeoutMs" in text
+    assert "m5os::update()" in text[text.index("streamRangeToFile") : text.index("bool streamRangeToOta")]
 
 
 def test_launcher_menu_no_auto_boot_hint():
