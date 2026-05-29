@@ -1060,9 +1060,10 @@ void drawHelpOverlay() {
     d.setTextColor(TFT_WHITE, TFT_BLACK);
     d.setCursor(4, 24);
     d.println(";/. w/s  navigate");
-    d.println("Enter     select / load app");
+    d.println("Enter     select / verify hash load");
+    d.println("Tab       fast load (skip hash)");
     d.println("ESC/`     load app (main menu)");
-    d.println("Tab       next app (in switcher)");
+    d.println("Tab       next app (in switcher list)");
     d.println("h / ?     this help");
     d.println("e         export catalog serial");
     d.println("ESC/`     back (Y/N confirm)");

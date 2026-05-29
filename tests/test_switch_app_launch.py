@@ -38,15 +38,11 @@ def test_switcher_drains_esc_before_loop():
 
 def test_switcher_confirm_accepts_keyboard_enter():
     text = LAUNCHER_CPP.read_text(encoding="utf-8")
-    switcher = text[text.index("void LauncherMenu::showAppSwitcher") : text.index(
-        "void LauncherMenu::showInstalledApps"
+    confirm = text[text.index("LoadConfirmChoice promptLoadAppConfirm") : text.index(
+        "}  // namespace", text.index("LoadConfirmChoice promptLoadAppConfirm")
     )]
-    confirm = switcher[
-        switcher.index("keyboardDrainEnter()") : switcher.index(
-            "redrawSwitcher();", switcher.index("keyboardDrainEnter()")
-        )
-    ]
     assert "keyboardEnterJustPressed()" in confirm
+    assert "keyboardTabJustPressed()" in confirm
     assert "readButtonsExtended()" in confirm
     assert "readButtons()" not in confirm
 
@@ -56,13 +52,9 @@ def test_explorer_confirm_accepts_keyboard_enter():
     explorer = text[text.index("void LauncherMenu::showFileExplorer") : text.index(
         "void LauncherMenu::showThemeMenu"
     )]
-    confirm = explorer[
-        explorer.index("keyboardDrainEnter()") : explorer.index(
-            "showFileExplorer(dirPath.c_str());", explorer.index("keyboardDrainEnter()")
-        )
-    ]
-    assert "keyboardEnterJustPressed()" in confirm
-    assert "readButtonsExtended()" in confirm
+    assert "promptLoadAppConfirm" in explorer
+    assert "launchBinPath(fullPath, opts)" in explorer
+    assert "keyboardTabJustPressed()" in text
 
 
 def test_keyboard_enter_helpers():
@@ -70,6 +62,8 @@ def test_keyboard_enter_helpers():
     assert "keyboardEnterJustPressed" in text
     assert "keyboardDrainEnter" in text
     assert "keyboardDrainBack" in text
+    assert "keyboardTabJustPressed" in text
+    assert "keyboardDrainTab" in text
 
 
 def test_launch_blocks_spiffs_apps():
@@ -191,3 +185,45 @@ def test_show_message_feeds_watchdog():
     fn = text[text.index("void showMessage(") : text.index("void bootIntroBegin")]
     assert "m5os::update()" in fn
     assert "delay(holdMs)" not in fn
+
+
+def test_fast_load_skip_hash_option():
+    launcher_h = (ROOT / "include" / "app_launcher.h").read_text(encoding="utf-8")
+    assert "LaunchOptions" in launcher_h
+    assert "skipHash" in launcher_h
+    assert "skipHash = false" in launcher_h
+
+    app = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    fn = app[app.index("LaunchResult launchFromOpenFile") : app.index("AppLauncher::AppLauncher")]
+    assert "userSkipHash" in fn
+    assert "launch_fast_load" in fn
+    assert "launch_checksum_user_skip" in fn
+    assert fn.index("if (userSkipHash)") < fn.index("tryLoadCachedDigest")
+    assert "if (!userSkipHash && canSkipFlashToCachedOta" in fn
+    assert "if (!userSkipHash) storeLaunchCache" in fn
+    assert "launch_magic_fail" in app
+
+
+def test_load_confirm_enter_tab_prompt():
+    text = LAUNCHER_CPP.read_text(encoding="utf-8")
+    assert "promptLoadAppConfirm" in text
+    assert "Enter verify hash" in text
+    assert "Tab fast load" in text
+    assert "keyboardTabJustPressed" in text
+    assert "LaunchOptions opts" in text
+    assert "launchBinFile(pkg.binFile, opts)" in text
+    assert "launchBinPath(fullPath, opts)" in text
+
+    device_h = DEVICE_H.read_text(encoding="utf-8")
+    assert "keyboardTabJustPressed" in device_h
+    assert "keyboardDrainTab" in device_h
+
+
+def test_fast_load_still_copies_with_progress():
+    text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
+    fn = text[text.index("LaunchResult launchFromOpenFile") : text.index("AppLauncher::AppLauncher")]
+    assert "copySdToOta" in fn
+    assert fn.index("userSkipHash") < fn.index("copySdToOta")
+    copy = text[text.index("bool copySdToOta") : text.index("LaunchResult launchFromOpenFile")]
+    assert "0xE9" in copy
+    assert "paintLaunchProgress" in copy

@@ -56,6 +56,15 @@ Product page: [Hacker Planet Cardputer](https://salvador-Data.github.io/cyberThr
 
 Longer background: [docs/ABOUT.md](docs/ABOUT.md) | App install guide: [docs/APP_INSTALL.md](docs/APP_INSTALL.md)
 
+### Fast load (skip hash)
+
+When you confirm loading an app from **Load app** or the file explorer:
+
+- **Enter** — default. SHA256 is computed from the SD file (and checked against manifest `sha256` when present) before copying to the run slot.
+- **Tab** — fast load. Skips hashing to save time on large `.bin` files. The copy still runs with a progress bar, and the launcher still verifies the ESP image magic byte (`0xE9`) in the run slot after copy.
+
+Use fast load only for apps you trust (your own builds or verified downloads). Serial log event: `launch_fast_load`.
+
 ---
 
 ## Hardware
@@ -259,7 +268,7 @@ Menu -> **M5Burner / recovery** shows USB and on-device recovery steps.
 See **[SECURITY.md](SECURITY.md)** for the full threat model. Summary:
 
 - Manifest and download URLs must be **HTTPS** from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, `hackerplanet.dev`, LauncherHub, or M5Burner CDN
-- Optional **`sha256`** per entry - verified on download and before flash
+- Optional **`sha256`** per entry - verified on download and before flash (unless you choose Tab fast load on confirm)
 - SD filenames sanitized - no path traversal under `/apps/` or `/firmware/`
 - Wi-Fi passwords entered on keyboard, never logged to USB serial
 

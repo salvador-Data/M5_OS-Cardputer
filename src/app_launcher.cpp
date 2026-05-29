@@ -308,7 +308,7 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
 
 
 LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, const String& label,
-                                const FirmwarePackage* meta) {
+                                const FirmwarePackage* meta, bool userSkipHash) {
     LaunchResult result;
 
     ui::showFlashProgress(0, "Load app", label + "\nStarting...");
@@ -342,42 +342,54 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     const uint32_t fileMtime = static_cast<uint32_t>(firmware.getLastWrite());
     String sdDigest;
-    const bool hashSkipped = tryLoadCachedDigest(cacheKey, firmwareSize, fileMtime, sdDigest);
+    bool hashSkipped = false;
 
-    if (hashSkipped) {
-        paintLoadAppPhase(100, label, "Hashing", "Unchanged — skip hash");
-        log::info("launch_hash_skip", cacheKey);
+    if (userSkipHash) {
+        paintLoadAppPhase(100, label, "Hashing", "Fast load — skip hash");
+        log::info("launch_fast_load", cacheKey);
+        hashSkipped = true;
     } else {
-        paintLoadAppPhase(0, label, "Hashing", "Verifying SD file");
-        gHashProgressCtx = {label, "Hashing"};
-        sdDigest =
-            security::computeFileSha256HexWithProgress(firmware, firmwareSize, hashProgressShim);
-        if (!sdDigest.length()) {
-            firmware.close();
-            result.message = "Hash failed";
-            surfaceLaunchFailure(label, result);
-            return result;
+        hashSkipped = tryLoadCachedDigest(cacheKey, firmwareSize, fileMtime, sdDigest);
+
+        if (hashSkipped) {
+            paintLoadAppPhase(100, label, "Hashing", "Unchanged — skip hash");
+            log::info("launch_hash_skip", cacheKey);
+        } else {
+            paintLoadAppPhase(0, label, "Hashing", "Verifying SD file");
+            gHashProgressCtx = {label, "Hashing"};
+            sdDigest =
+                security::computeFileSha256HexWithProgress(firmware, firmwareSize, hashProgressShim);
+            if (!sdDigest.length()) {
+                firmware.close();
+                result.message = "Hash failed";
+                surfaceLaunchFailure(label, result);
+                return result;
+            }
         }
     }
 
-    if (meta && meta->sha256.length()) {
-        if (!security::sha256Equal(meta->sha256, sdDigest)) {
-            firmware.close();
-            result.message = "SHA256 mismatch";
-            log::info("launch_checksum_fail", cacheKey);
-            surfaceLaunchFailure(label, result);
-            return result;
+    if (!userSkipHash) {
+        if (meta && meta->sha256.length()) {
+            if (!security::sha256Equal(meta->sha256, sdDigest)) {
+                firmware.close();
+                result.message = "SHA256 mismatch";
+                log::info("launch_checksum_fail", cacheKey);
+                surfaceLaunchFailure(label, result);
+                return result;
+            }
+            log::info("launch_checksum_ok", cacheKey);
+        } else if (meta) {
+            log::info("launch_checksum_skip", cacheKey);
+        } else {
+            log::info("launch_checksum_skip", cacheKey);
         }
-        log::info("launch_checksum_ok", cacheKey);
-    } else if (meta) {
-        log::info("launch_checksum_skip", cacheKey);
     } else {
-        log::info("launch_checksum_skip", cacheKey);
+        log::info("launch_checksum_user_skip", cacheKey);
     }
 
     beginLaunchSession();
 
-    if (canSkipFlashToCachedOta(cacheKey, sdDigest)) {
+    if (!userSkipHash && canSkipFlashToCachedOta(cacheKey, sdDigest)) {
         firmware.close();
         paintLoadAppPhase(100, label, "Rebooting", "Already loaded");
         result.ok = true;
@@ -423,7 +435,7 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
     }
     firmware.close();
 
-    storeLaunchCache(cacheKey, sdDigest, firmwareSize, fileMtime);
+    if (!userSkipHash) storeLaunchCache(cacheKey, sdDigest, firmwareSize, fileMtime);
 
     paintLoadAppPhase(100, label, "Rebooting");
     result.ok = true;
@@ -460,7 +472,7 @@ AppLauncher::AppLauncher(FirmwareCatalog& catalog) : catalog_(catalog) {}
 
 
 
-LaunchResult AppLauncher::launchBinFile(const String& binFile) {
+LaunchResult AppLauncher::launchBinFile(const String& binFile, LaunchOptions opts) {
     LaunchResult result;
     const String safeBin = security::sanitizeBinFilename(binFile);
     const String uiLabel = safeBin.length() ? safeBin : binFile;
@@ -491,12 +503,12 @@ LaunchResult AppLauncher::launchBinFile(const String& binFile) {
         return result;
     }
 
-    return launchFromOpenFile(path, safeBin, safeBin, meta);
+    return launchFromOpenFile(path, safeBin, safeBin, meta, opts.skipHash);
 }
 
 
 
-LaunchResult AppLauncher::launchBinPath(const String& sdPath) {
+LaunchResult AppLauncher::launchBinPath(const String& sdPath, LaunchOptions opts) {
     LaunchResult result;
     String path = sdPath;
     path.trim();
@@ -529,7 +541,7 @@ LaunchResult AppLauncher::launchBinPath(const String& sdPath) {
     }
 
     const FirmwarePackage* meta = catalog_.findByBinFile(safeBin);
-    return launchFromOpenFile(path, path, leaf, meta);
+    return launchFromOpenFile(path, path, leaf, meta, opts.skipHash);
 }
 
 

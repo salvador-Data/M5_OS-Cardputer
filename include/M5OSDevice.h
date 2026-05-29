@@ -106,6 +106,29 @@ inline void keyboardDrainEnter() {
     }
 }
 
+inline bool keyboardTabHeld() {
+    if (!M5Cardputer.Keyboard.isPressed()) return false;
+    return M5Cardputer.Keyboard.keysState().tab;
+}
+
+/** Tab on load confirm — fast load (skip hash). */
+inline bool keyboardTabJustPressed() {
+    if (!M5Cardputer.Keyboard.isChange()) return false;
+    return M5Cardputer.Keyboard.keysState().tab;
+}
+
+inline void keyboardDrainTab() {
+    for (int i = 0; i < 24; ++i) {
+        update();
+        if (!M5Cardputer.Keyboard.isChange() && !keyboardTabHeld()) break;
+        delay(5);
+    }
+    while (keyboardTabHeld()) {
+        update();
+        delay(10);
+    }
+}
+
 inline Buttons readButtons() {
     Buttons b;
     if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) {

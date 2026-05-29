@@ -29,6 +29,35 @@ void showSdRequired(const String& action = "") {
     ui::showMessage("No SD", body, TFT_YELLOW);
 }
 
+enum class LoadConfirmChoice { Cancel, VerifyHash, FastLoad };
+
+LoadConfirmChoice promptLoadAppConfirm(const String& line1, const String& line2) {
+    ui::drawHeader("Load app");
+    m5os::lcd().setCursor(4, 28);
+    m5os::lcd().println(line1);
+    m5os::lcd().setCursor(4, 44);
+    m5os::lcd().println(line2);
+    m5os::lcd().setCursor(4, 64);
+    m5os::lcd().print("Enter verify hash");
+    m5os::lcd().setCursor(4, 78);
+    m5os::lcd().print("Tab fast load (skip hash)");
+    m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
+    m5os::lcd().setCursor(4, 96);
+    m5os::lcd().print("ESC/` back");
+
+    m5os::keyboardDrainBack();
+    m5os::keyboardDrainEnter();
+    m5os::keyboardDrainTab();
+    while (true) {
+        m5os::update();
+        Buttons keys = ui::readButtonsExtended();
+        if (keys.back || m5os::keyboardBackJustPressed()) return LoadConfirmChoice::Cancel;
+        if (keys.ok || m5os::keyboardEnterJustPressed()) return LoadConfirmChoice::VerifyHash;
+        if (m5os::keyboardTabJustPressed()) return LoadConfirmChoice::FastLoad;
+        delay(power::uiLoopDelayMs());
+    }
+}
+
 }  // namespace
 
 LauncherMenu::LauncherMenu(FirmwareCatalog& catalog, AppLauncher& launcher)
@@ -131,33 +160,19 @@ void LauncherMenu::showAppSwitcher() {
         if (keys.back || m5os::keyboardBackJustPressed()) return;
         if (keys.ok || m5os::keyboardEnterJustPressed()) {
             const auto& pkg = installed[index];
-            ui::drawHeader("Load app");
-            m5os::lcd().setCursor(4, 28);
-            m5os::lcd().println(pkg.name);
-            m5os::lcd().setCursor(4, 44);
-            m5os::lcd().println(pkg.description.length() ? pkg.description : "Field firmware");
-            m5os::lcd().setCursor(4, 64);
-            m5os::lcd().print("Enter copy to run slot");
-            m5os::lcd().setCursor(4, 78);
-            m5os::lcd().print("ESC/` back");
-
-            m5os::keyboardDrainBack();
-            m5os::keyboardDrainEnter();
-            while (true) {
-                m5os::update();
-                Buttons keys = ui::readButtonsExtended();
-                if (keys.back || m5os::keyboardBackJustPressed()) break;
-                if (keys.ok || m5os::keyboardEnterJustPressed()) {
-                    ui::showFlashProgress(0, "Load app", pkg.name + "\nStarting...");
-                    m5os::update();
-                    LaunchResult result = launcher_.launchBinFile(pkg.binFile);
-                    (void)result;
-                    return;
-                }
-                delay(power::uiLoopDelayMs());
+            const LoadConfirmChoice choice = promptLoadAppConfirm(
+                pkg.name, pkg.description.length() ? pkg.description : "Field firmware");
+            if (choice == LoadConfirmChoice::Cancel) {
+                redrawSwitcher();
+                continue;
             }
-            redrawSwitcher();
-            continue;
+            LaunchOptions opts;
+            opts.skipHash = choice == LoadConfirmChoice::FastLoad;
+            ui::showFlashProgress(0, "Load app", pkg.name + "\nStarting...");
+            m5os::update();
+            LaunchResult result = launcher_.launchBinFile(pkg.binFile, opts);
+            (void)result;
+            return;
         }
         delay(power::uiLoopDelayMs());
     }
@@ -359,32 +374,17 @@ void LauncherMenu::showFileExplorer(const char* path) {
     } else {
         const String fullPath = vfs::joinPath(dirPath, chosen);
         if (chosen.endsWith(".bin")) {
-            ui::drawHeader("Load app");
-            m5os::lcd().setCursor(4, 28);
-            m5os::lcd().println(chosen);
-            m5os::lcd().setCursor(4, 44);
-            m5os::lcd().println(fullPath);
-            m5os::lcd().setCursor(4, 64);
-            m5os::lcd().print("Enter copy to run slot");
-            m5os::lcd().setCursor(4, 78);
-            m5os::lcd().print("ESC/` back");
-
-            m5os::keyboardDrainBack();
-            m5os::keyboardDrainEnter();
-            while (true) {
-                m5os::update();
-                Buttons keys = ui::readButtonsExtended();
-                if (keys.back || m5os::keyboardBackJustPressed()) break;
-                if (keys.ok || m5os::keyboardEnterJustPressed()) {
-                    ui::showFlashProgress(0, "Load app", chosen + "\nStarting...");
-                    m5os::update();
-                    LaunchResult result = launcher_.launchBinPath(fullPath);
-                    (void)result;
-                    return;
-                }
-                delay(power::uiLoopDelayMs());
+            const LoadConfirmChoice choice = promptLoadAppConfirm(chosen, fullPath);
+            if (choice == LoadConfirmChoice::Cancel) {
+                showFileExplorer(dirPath.c_str());
+                return;
             }
-            showFileExplorer(dirPath.c_str());
+            LaunchOptions opts;
+            opts.skipHash = choice == LoadConfirmChoice::FastLoad;
+            ui::showFlashProgress(0, "Load app", chosen + "\nStarting...");
+            m5os::update();
+            LaunchResult result = launcher_.launchBinPath(fullPath, opts);
+            (void)result;
             return;
         }
         ui::showMessage("File", fullPath);
