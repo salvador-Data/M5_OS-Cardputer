@@ -116,6 +116,17 @@ cd M5_OS-Cardputer
 ```
 
 ```powershell
+.\scripts\install-deps.ps1
+```
+
+One-time on Windows: installs **intelhex** into PlatformIO's Python env (needed for `bootloader.bin`). If you see `ModuleNotFoundError: No module named 'intelhex'`, run the script above or:
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pip.exe" install intelhex
+```
+
+
+```powershell
 & "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer
 ```
 
@@ -132,6 +143,15 @@ Serial monitor:
 ```
 
 If `pio` is on your PATH (PlatformIO Core installed globally), you can use `pio run -e m5stack-cardputer` instead of the full path above.
+
+
+**Windows build tip:** If the compile fails with `libM5GFX.a` / `M5GFX.cpp.o: No such file`, retry with a single job (avoids a rare parallel `ar.exe` race):
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\pio.exe" run -e m5stack-cardputer -j 1
+```
+
+The IRremote `-Wvolatile` pragma warning is harmless and can be ignored.
 
 ### VS Code + PlatformIO extension
 
