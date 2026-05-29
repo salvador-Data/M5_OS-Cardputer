@@ -5,6 +5,7 @@
 #include "m5os_gc.h"
 #include "m5os_vfs.h"
 #include "serial_log.h"
+#include "power_manager.h"
 #include "ui_display.h"
 #include "wifi_manager.h"
 
@@ -58,9 +59,9 @@ void LauncherMenu::showInstalledApps() {
     m5os::lcd().setCursor(4, 44);
     m5os::lcd().println(pkg.description.length() ? pkg.description : "Field firmware");
     m5os::lcd().setCursor(4, 64);
-    m5os::lcd().print("Enter flash+run");
+    m5os::lcd().print("Enter flash app slot");
     m5os::lcd().setCursor(4, 78);
-    m5os::lcd().print("` cancel");
+    m5os::lcd().print("` cancel  (M5 OS on SD)");
 
     while (true) {
         m5os::update();
@@ -71,7 +72,7 @@ void LauncherMenu::showInstalledApps() {
             if (!result.ok) ui::showMessage("Launch failed", result.message, TFT_RED);
             return;
         }
-        delay(80);
+        delay(power::uiLoopDelayMs());
     }
 }
 
@@ -215,7 +216,7 @@ void LauncherMenu::showStorageCleanup() {
             ui::showMessage("Cleanup done", body, TFT_GREEN, 2400);
             return;
         }
-        delay(80);
+        delay(power::uiLoopDelayMs());
     }
 }
 

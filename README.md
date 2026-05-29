@@ -1,8 +1,8 @@
-<p align="center">
+﻿<p align="center">
   <img src="docs/images/hero.png" alt="M5 OS on M5Stack Cardputer" width="720"/>
 </p>
 
-<h1 align="center">M5 OS — Cardputer Edition</h1>
+<h1 align="center">M5 OS â€” Cardputer Edition</h1>
 
 <p align="center">
   <strong>A keyboard-first firmware launcher & SD package manager for the M5Stack Cardputer</strong>
@@ -21,20 +21,20 @@
 
 ## About
 
-**M5 OS** turns your Cardputer into a small **handheld OS shell** with an SD-card “hard drive” layout: compartmentalized apps under `/apps/`, user data in `/home/default/`, temp and logs on `/tmp` and `/var/log`. List firmware, download from manifest, browse files, run storage cleanup, switch themes, and join Wi-Fi — all from a keyboard-first menu.
+**M5 OS** turns your Cardputer into a small **handheld OS shell** with an SD-card â€œhard driveâ€ layout: compartmentalized apps under `/apps/`, user data in `/home/default/`, temp and logs on `/tmp` and `/var/log`. List firmware, download from manifest, browse files, run storage cleanup, switch themes, and join Wi-Fi â€” all from a keyboard-first menu.
 
 Built by **[salvador-Data](https://github.com/salvador-Data)** / **Hacker Planet LLC** for makers, students, and authorized security researchers who live in the M5 + ESP32 ecosystem.
 
-Part of the **Hacker Planet** toolkit → [project ecosystem](https://github.com/salvador-Data/cyberThreatGotchi/blob/main/docs/ECOSYSTEM.md).
+Part of the **Hacker Planet** toolkit â†’ [project ecosystem](https://github.com/salvador-Data/cyberThreatGotchi/blob/main/docs/ECOSYSTEM.md).
 
 ![M5 Cardputer + CTG](https://raw.githubusercontent.com/salvador-Data/cyberThreatGotchi/main/docs/images/og-m5-cardputer.png)
 
 | Product | Description |
 |---------|-------------|
-| **Remote Possibility** | CTG field remote — poll `/api/status` over Wi‑Fi |
+| **Remote Possibility** | CTG field remote â€” poll `/api/status` over Wiâ€‘Fi |
 | **BLE Bot** | Authorized BLE scout on Cardputer keyboard UI |
 
-Product page → [HackerPlanet Cardputer](https://salvador-Data.github.io/cyberThreatGotchi/cardputer.html) · [docs/CARDPUTER_PRODUCTS.md](docs/CARDPUTER_PRODUCTS.md)
+Product page â†’ [HackerPlanet Cardputer](https://salvador-Data.github.io/cyberThreatGotchi/cardputer.html) Â· [docs/CARDPUTER_PRODUCTS.md](docs/CARDPUTER_PRODUCTS.md)
 
 Poll **CyberThreatGotchi** mood from the field:
 
@@ -44,7 +44,7 @@ Poll **CyberThreatGotchi** mood from the field:
 | PlatformIO firmware | [scripts/cardputer/platformio](https://github.com/salvador-Data/cyberThreatGotchi/tree/main/scripts/cardputer/platformio) |
 
 ```ini
-# platformio.ini — set CTG_HOST to your BPI-R3 Mini IP
+# platformio.ini â€” set CTG_HOST to your BPI-R3 Mini IP
 -DCTG_HOST=\"192.168.1.50\"
 ```
 
@@ -65,9 +65,10 @@ Full guide: [CARDPUTER.md](https://github.com/salvador-Data/cyberThreatGotchi/bl
 | **File explorer** | Walk SD paths from the device |
 | **Themes** | Baby Blue, Hacker Green, Mr. Robot Red, **Hacker Planet** (default boot) |
 | **Wi-Fi setup** | Scan and connect before downloading |
-| **M5Burner bridge** | On-device recovery steps + serial workflow for desktop flash |
+| **Battery / power** | Top-right status bar; auto **SAV** power savings at ≤20% battery (brightness + Wi-Fi sleep) |
+| **M5Burner bridge** | On-device recovery steps + serial workflow for desktop **base OS** flash |
 
-Longer background → **[docs/ABOUT.md](docs/ABOUT.md)**
+Longer background â†’ **[docs/ABOUT.md](docs/ABOUT.md)** Â· App install guide â†’ **[docs/APP_INSTALL.md](docs/APP_INSTALL.md)**
 
 ---
 
@@ -83,23 +84,23 @@ Longer background → **[docs/ABOUT.md](docs/ABOUT.md)**
 
 **Repo layout:** `platformio.ini` and `src/` live at the **repository root**. There is **no** `platformio/` subfolder (unlike [BLE-Bot-Cardputer](https://github.com/salvador-Data/BLE-Bot-Cardputer) or [Remote-Possibility](https://github.com/salvador-Data/Remote-Possibility), which use `platformio/platformio.ini`).
 
-Clone as a **sibling** of `cyberThreatGotchi` — not inside it:
+Clone as a **sibling** of `cyberThreatGotchi` â€” not inside it:
 
 ```text
 C:\Users\Owner\Projects\
-├── cyberThreatGotchi\          ← CTG repo (separate)
-└── M5_OS-Cardputer\            ← recommended clone location
-    ├── platformio.ini          ← PlatformIO project root
-    ├── src\                    ← firmware source
-    ├── include\
-    └── data\
+â”œâ”€â”€ cyberThreatGotchi\          â† CTG repo (separate)
+â””â”€â”€ M5_OS-Cardputer\            â† recommended clone location
+    â”œâ”€â”€ platformio.ini          â† PlatformIO project root
+    â”œâ”€â”€ src\                    â† firmware source
+    â”œâ”€â”€ include\
+    â””â”€â”€ data\
 ```
 
-If you already have `cyberThreatGotchi\M5_OS-Cardputer\` on disk, that folder is a **separate nested git clone** (not a submodule). PlatformIO still works from that path — open the folder that contains `platformio.ini`. Run `git pull` there to stay current, or re-clone to `Projects\M5_OS-Cardputer` as shown above.
+If you already have `cyberThreatGotchi\M5_OS-Cardputer\` on disk, that folder is a **separate nested git clone** (not a submodule). PlatformIO still works from that path â€” open the folder that contains `platformio.ini`. Run `git pull` there to stay current, or re-clone to `Projects\M5_OS-Cardputer` as shown above.
 
 ### PlatformIO CLI (PowerShell)
 
-If you already cloned and your prompt shows `...\M5_OS-Cardputer>`, you are at the project root — **do not** `cd platformio` or `cd M5_OS-Cardputer` again.
+If you already cloned and your prompt shows `...\M5_OS-Cardputer>`, you are at the project root â€” **do not** `cd platformio` or `cd M5_OS-Cardputer` again.
 
 Fresh clone + build:
 
@@ -175,7 +176,7 @@ The IRremote `-Wvolatile` pragma warning is harmless and can be ignored.
 
 ### VS Code + PlatformIO extension
 
-1. **File → Open Folder…** → select `C:\Users\Owner\Projects\M5_OS-Cardputer` (the folder that contains `platformio.ini`).
+1. **File â†’ Open Folderâ€¦** â†’ select `C:\Users\Owner\Projects\M5_OS-Cardputer` (the folder that contains `platformio.ini`).
 2. Wait for PlatformIO to finish indexing libraries.
 3. Bottom toolbar: pick environment **`m5stack-cardputer`**.
 4. Click **Build** (checkmark) or **Upload** (arrow). No `cd` required.
@@ -223,7 +224,7 @@ Insert a **FAT32** microSD (contacts away from the screen). On success, boot sho
 | `h` / `?` | Keyboard shortcuts |
 | `` ` `` | Back |
 
-Serial monitor `@ 115200` — JSON boot/catalog/launch logs.
+Serial monitor `@ 115200` â€” JSON boot/catalog/launch logs.
 
 ---
 
@@ -231,7 +232,7 @@ Serial monitor `@ 115200` — JSON boot/catalog/launch logs.
 
 Copy [`data/manifest.example.json`](data/manifest.example.json) to SD **`/apps/manifest.json`** (legacy root `/manifest.json` still accepted). Default URL is compiled from `include/m5os_config.h` (override with `-DM5OS_MANIFEST_URL=...`).
 
-### SD “hard drive” layout
+### SD â€œhard driveâ€ layout
 
 On first boot with a FAT32 card inserted, M5 OS creates:
 
@@ -247,7 +248,7 @@ On first boot with a FAT32 card inserted, M5 OS creates:
   apps/<name>/        Per-app data compartments
   cache/              Reclaimable cache (GC menu)
 /tmp/                 Temp files (24h TTL sweep on boot)
-/var/log/             Rotated logs (no FAT defrag — see SECURITY.md)
+/var/log/             Rotated logs (no FAT defrag â€” see SECURITY.md)
 ```
 
 **Legacy:** flat `/firmware/*.bin` and root `/manifest.json` still work; new downloads land in `/apps/<slug>/`.
@@ -273,15 +274,15 @@ Or legacy flat paths:
 /firmware/ble_bot.bin
 ```
 
-Use **Launch installed app** to flash from SD. To return to M5 OS, reflash this launcher via PlatformIO or M5Burner (menu → **M5Burner / recovery**).
+Use **Launch installed app** to flash from SD. To return to M5 OS, reflash this launcher via PlatformIO or M5Burner (menu â†’ **M5Burner / recovery**).
 
 ### Security
 
 See **[SECURITY.md](SECURITY.md)** for the full threat model. Summary:
 
 - Manifest and download URLs must be **HTTPS** from `github.com/salvador-Data`, `raw.githubusercontent.com/salvador-Data`, or `hackerplanet.dev`
-- Optional **`sha256`** per entry — verified on download and before flash (replace placeholders in `data/manifest.example.json` before publishing)
-- SD filenames sanitized — no path traversal under `/firmware/`
+- Optional **`sha256`** per entry â€” verified on download and before flash (replace placeholders in `data/manifest.example.json` before publishing)
+- SD filenames sanitized â€” no path traversal under `/firmware/`
 - Wi-Fi passwords entered on keyboard, **never logged** to USB serial
 
 Validate a manifest on your PC:
@@ -301,26 +302,26 @@ Get-FileHash -Algorithm SHA256 data/firmware/ble_bot.bin  # Windows PowerShell
 
 ```text
 M5_OS-Cardputer/
-├── src/
-│   ├── main.cpp              # Boot sequence + menu entry
-│   ├── m5os_vfs.cpp          # SD VFS mount + path layout
-│   ├── m5os_gc.cpp           # Storage cleanup (boot + menu)
-│   ├── launcher_menu.cpp     # Main menu & sub-screens
-│   ├── firmware_catalog.cpp  # Manifest + SD package manager
-│   ├── app_launcher.cpp      # Flash .bin from SD (Update API)
-│   ├── ui_display.cpp        # Keyboard + LCD UI + boot splash
-│   ├── burner_bridge.cpp     # M5Burner recovery workflow
-│   ├── wifi_manager.cpp      # Wi-Fi scan/connect
-│   ├── m5os_security.cpp     # URL whitelist + path sanitizers
-│   └── serial_log.cpp        # USB JSON logging
-├── include/                  # Headers (m5os_config, m5os_vfs, …)
-├── scripts/
-│   ├── validate_manifest.py
-│   └── m5os_paths.py         # Host VFS/GC helpers (pytest)
-├── tests/
-│   ├── test_validate_manifest.py
-│   └── test_m5os_paths.py
-├── data/manifest.example.json
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ main.cpp              # Boot sequence + menu entry
+â”‚   â”œâ”€â”€ m5os_vfs.cpp          # SD VFS mount + path layout
+â”‚   â”œâ”€â”€ m5os_gc.cpp           # Storage cleanup (boot + menu)
+â”‚   â”œâ”€â”€ launcher_menu.cpp     # Main menu & sub-screens
+â”‚   â”œâ”€â”€ firmware_catalog.cpp  # Manifest + SD package manager
+â”‚   â”œâ”€â”€ app_launcher.cpp      # Flash .bin from SD (Update API)
+â”‚   â”œâ”€â”€ ui_display.cpp        # Keyboard + LCD UI + boot splash
+â”‚   â”œâ”€â”€ burner_bridge.cpp     # M5Burner recovery workflow
+â”‚   â”œâ”€â”€ wifi_manager.cpp      # Wi-Fi scan/connect
+â”‚   â”œâ”€â”€ m5os_security.cpp     # URL whitelist + path sanitizers
+â”‚   â””â”€â”€ serial_log.cpp        # USB JSON logging
+â”œâ”€â”€ include/                  # Headers (m5os_config, m5os_vfs, â€¦)
+â”œâ”€â”€ scripts/
+â”‚   â”œâ”€â”€ validate_manifest.py
+â”‚   â””â”€â”€ m5os_paths.py         # Host VFS/GC helpers (pytest)
+â”œâ”€â”€ tests/
+â”‚   â”œâ”€â”€ test_validate_manifest.py
+â”‚   â””â”€â”€ test_m5os_paths.py
+â”œâ”€â”€ data/manifest.example.json
 ```
 
 ---
@@ -333,11 +334,11 @@ For **education and authorized testing** on devices and networks you own. You ar
 
 ## Related projects
 
-- [Mr.-CrackBot-AI-Nano](https://github.com/salvador-Data/Mr.-CrackBot-AI-Nano) — Jetson Nano lab automation
-- [M5-Cardputer-Mr.-Robot-Handshake-Keeper](https://github.com/salvador-Data/M5-Cardputer-Mr.-Robot-Handshake-Keeper) — Cardputer security research sketch
+- [Mr.-CrackBot-AI-Nano](https://github.com/salvador-Data/Mr.-CrackBot-AI-Nano) â€” Jetson Nano lab automation
+- [M5-Cardputer-Mr.-Robot-Handshake-Keeper](https://github.com/salvador-Data/M5-Cardputer-Mr.-Robot-Handshake-Keeper) â€” Cardputer security research sketch
 
 ---
 
 <p align="center">
-  <sub>★ If this helps your build, star the repo — it fuels the next Cardputer release.</sub>
+  <sub>â˜… If this helps your build, star the repo â€” it fuels the next Cardputer release.</sub>
 </p>

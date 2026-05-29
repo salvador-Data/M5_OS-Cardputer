@@ -1,5 +1,7 @@
 #include "ui_display.h"
 
+#include "power_manager.h"
+
 #include <M5Unified.h>
 
 namespace m5os::ui {
@@ -31,38 +33,108 @@ bool color565IsDark(uint16_t c) {
 }
 
 uint16_t themeFieldBg() {
+    return lerp565(TFT_BLACK, gTheme.primary, 90);
+}
+
+uint16_t themeFieldText() {
+    if (!color565IsDark(gTheme.primary)) return gTheme.primary;
     if (!color565IsDark(gTheme.secondary)) return gTheme.secondary;
-    return lerp565(TFT_BLACK, gTheme.primary, 120);
+    return TFT_WHITE;
 }
 
 uint16_t themeLabelOnBlack() {
+    if (!color565IsDark(gTheme.primary)) return gTheme.primary;
     if (!color565IsDark(gTheme.secondary)) return gTheme.secondary;
-    return gTheme.primary;
+    return TFT_WHITE;
 }
 
-void drawPasswordFrame(const char* title, size_t length) {
-    drawHeader(title);
-    auto& d = m5os::lcd();
-    const uint16_t fieldBg = themeFieldBg();
+uint16_t themeHintOnBlack() {
+    if (!color565IsDark(gTheme.secondary)) return gTheme.secondary;
+    return lerp565(gTheme.primary, TFT_WHITE, 160);
+}
 
-    d.setTextColor(themeLabelOnBlack(), TFT_BLACK);
+constexpr int kPassCharW = 6;
+constexpr int kPassPrefixChars = 6;  // "Pass: "
+
+size_t passwordVisibleChars(int fieldInnerW) {
+    const int starAreaW = fieldInnerW - kPassPrefixChars * kPassCharW;
+    return static_cast<size_t>(max(1, starAreaW / kPassCharW));
+}
+
+size_t passwordScrollOffset(size_t length, size_t visible) {
+    if (length <= visible) return 0;
+    return length - visible;
+}
+
+void drawPasswordFrame(const char* title, size_t length, size_t scrollOffset, bool fullFrame) {
+    auto& d = m5os::lcd();
+    if (fullFrame) {
+        drawHeader(title);
+    } else {
+        d.fillRect(0, 20, d.width(), 58, TFT_BLACK);
+    }
+
+    const uint16_t fieldBg = themeFieldBg();
+    const uint16_t fieldFg = themeFieldText();
+    const uint16_t labelFg = themeLabelOnBlack();
+    const uint16_t hintFg = themeHintOnBlack();
+
+    d.setTextColor(labelFg, TFT_BLACK);
     d.setCursor(4, 24);
     d.print("Password:");
 
+    const int fieldX = 4;
     const int fieldY = 38;
+    const int fieldW = d.width() - 8;
     const int fieldH = 18;
-    d.fillRect(4, fieldY - 2, d.width() - 8, fieldH, fieldBg);
-    d.setTextColor(TFT_WHITE, fieldBg);
-    d.setCursor(8, fieldY + 2);
-    d.print("Pass: ");
-    for (size_t i = 0; i < length; ++i) d.print('*');
+    const int textX = 8;
+    const int textY = fieldY + 2;
+    const size_t visible = passwordVisibleChars(fieldW - (textX - fieldX));
+    const size_t showStart = scrollOffset;
+    const size_t showEnd = min(length, scrollOffset + visible);
 
-    d.setTextColor(gTheme.primary, TFT_BLACK);
+    d.fillRect(fieldX, fieldY - 2, fieldW, fieldH, fieldBg);
+
+    if (scrollOffset > 0) {
+        d.setTextColor(hintFg, fieldBg);
+        d.setCursor(fieldX + 2, textY);
+        d.print('<');
+    }
+    if (length > scrollOffset + visible) {
+        d.setTextColor(hintFg, fieldBg);
+        d.setCursor(fieldX + fieldW - 10, textY);
+        d.print('>');
+    }
+
+    d.setTextColor(fieldFg, fieldBg);
+    d.setCursor(textX, textY);
+    d.print("Pass: ");
+    for (size_t i = showStart; i < showEnd; ++i) d.print('*');
+
+    if (length == showEnd) {
+        const int cursorX = textX + kPassPrefixChars * kPassCharW + static_cast<int>(showEnd - showStart) * kPassCharW;
+        d.drawFastVLine(cursorX, textY - 1, 10, fieldFg);
+    }
+
+    if (length > visible) {
+        const int barX = fieldX + 4;
+        const int barY = fieldY + fieldH - 1;
+        const int barW = fieldW - 8;
+        d.drawRect(barX, barY, barW, 3, hintFg);
+        const size_t maxScroll = length - visible;
+        const int thumbW = max(4, static_cast<int>(barW * visible / length));
+        const int travel = barW - thumbW;
+        const int thumbX = barX + (maxScroll > 0 ? static_cast<int>(travel * scrollOffset / maxScroll) : 0);
+        d.fillRect(thumbX, barY + 1, thumbW, 1, gTheme.primary);
+    }
+
+    d.setTextColor(hintFg, TFT_BLACK);
     d.setCursor(4, 66);
     d.print("Enter save  ` cancel");
 }
 
 void playBootChime() {
+    if (!power::allowBootChime()) return;
     auto& spk = M5.Speaker;
     if (!spk.isEnabled()) spk.begin();
     const int notes[] = {392, 494, 587, 784};
@@ -172,6 +244,7 @@ void drawHeader(const char* title) {
     d.setTextColor(gTheme.primary, TFT_BLACK);
     d.setCursor(4, 4);
     d.printf("%s", title);
+    power::drawStatusBar(d);
     d.drawFastHLine(0, 18, d.width(), gTheme.secondary);
 }
 
@@ -202,7 +275,8 @@ void bootIntroStage(BootStage stage, const String& detail) {
 void bootIntroFinish() {
     bootIntroStage(BootStage::Ready, "");
     const unsigned long elapsed = millis() - gBootStartMs;
-    if (elapsed < 2200) delay(2200 - elapsed);
+    const unsigned long minHold = power::isSaving() ? 900 : 2200;
+    if (elapsed < minHold) delay(minHold - elapsed);
 }
 
 void introSplash() {
@@ -275,7 +349,7 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
         if (keys.down) index = (index + 1) % static_cast<int>(items.size());
         if (keys.ok) return index;
         if (keys.back) return -1;
-        delay(80);
+        delay(power::uiLoopDelayMs());
     }
 }
 
@@ -296,7 +370,7 @@ void drawHelpOverlay() {
         m5os::update();
         Buttons keys = readButtonsExtended();
         if (keys.back || keys.ok || keys.help) return;
-        delay(80);
+        delay(power::uiLoopDelayMs());
     }
 }
 
@@ -308,17 +382,17 @@ void drawBurnerHelp() {
     d.println("1. USB-C to PC");
     d.println("2. M5Burner app");
     d.println("3. Cardputer target");
-    d.println("4. Flash M5_OS .bin");
+    d.println("4. Flash M5 OS base .bin");
     d.setTextColor(TFT_DARKGREY, TFT_BLACK);
     d.setCursor(4, 96);
-    d.println("docs.m5stack.com/m5burner");
+    d.println("Apps stay on SD /apps/");
     d.setCursor(4, 118);
     d.print("Any key back");
     while (true) {
         m5os::update();
         Buttons keys = m5os::readButtons();
         if (keys.back || keys.ok) return;
-        delay(80);
+        delay(power::uiLoopDelayMs());
     }
 }
 
@@ -326,32 +400,44 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
     if (!out || outLen < 2) return false;
     out[0] = '\0';
     size_t length = 0;
-    size_t lastDrawnLength = SIZE_MAX;
+    size_t scrollOffset = 0;
+    size_t lastDrawToken = SIZE_MAX;
+    bool needFullFrame = true;
+
+    auto drawToken = [&]() -> size_t { return (length << 16) | (scrollOffset & 0xFFFF); };
 
     while (true) {
-        if (length != lastDrawnLength) {
-            drawPasswordFrame(title, length);
-            lastDrawnLength = length;
+        const int fieldInnerW = m5os::lcd().width() - 12;
+        const size_t visible = passwordVisibleChars(fieldInnerW);
+        scrollOffset = passwordScrollOffset(length, visible);
+        const size_t token = drawToken();
+        if (token != lastDrawToken || needFullFrame) {
+            drawPasswordFrame(title, length, scrollOffset, needFullFrame);
+            lastDrawToken = token;
+            needFullFrame = false;
         }
 
         m5os::update();
-        Buttons keys = m5os::readButtons();
-        if (keys.back) {
-            out[0] = '\0';
-            return false;
-        }
-        if (keys.ok) {
-            out[length] = '\0';
-            return true;
-        }
-
         if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
             const auto status = M5Cardputer.Keyboard.keysState();
+            if (status.enter) {
+                out[length] = '\0';
+                return true;
+            }
             if (status.del && length > 0) {
                 length--;
                 out[length] = '\0';
+                continue;
             }
             for (auto key : status.word) {
+                if (key == '`' || key == 27) {
+                    out[0] = '\0';
+                    return false;
+                }
+                if (key == '\n' || key == '\r') {
+                    out[length] = '\0';
+                    return true;
+                }
                 if (key == '\b' || key == 127) {
                     if (length > 0) {
                         length--;
@@ -365,7 +451,7 @@ bool promptPassword(char* out, size_t outLen, const char* title) {
                 }
             }
         }
-        delay(80);
+        delay(power::uiLoopDelayMs());
     }
 }
 

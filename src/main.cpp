@@ -23,6 +23,7 @@ static m5os::LauncherMenu gMenu(gCatalog, gLauncher);
 void setup() {
     m5os::log::begin();
     m5os::begin();
+    m5os::power::begin();
 
     // Mount SD before boot splash (FSPI/SPI2 — display uses SPI3 via lgfx).
     const bool sdOk = gCatalog.ensureStorage();
@@ -60,5 +61,5 @@ void setup() {
 
 void loop() {
     m5os::update();
-    delay(50);
+    delay(m5os::power::uiLoopDelayMs() / 2);
 }

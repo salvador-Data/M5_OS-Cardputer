@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 
+#include "power_manager.h"
 #include "serial_log.h"
 #include "ui_display.h"
 
@@ -44,6 +45,7 @@ bool wifiConnectInteractive(char* ssidOut, size_t ssidLen, char* passOut, size_t
     }
     passOut[0] = '\0';
     if (WiFi.status() == WL_CONNECTED) {
+        if (power::isSaving()) WiFi.setSleep(WIFI_PS_MIN_MODEM);
         log::info("wifi_connected", wifiIpAddress());
         ui::showMessage("WiFi", wifiIpAddress(), TFT_GREEN);
         return true;

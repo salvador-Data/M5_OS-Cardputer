@@ -2,6 +2,8 @@
 
 #include <M5Cardputer.h>
 
+#include "power_manager.h"
+
 namespace m5os {
 
 inline void begin() {
@@ -12,7 +14,11 @@ inline void begin() {
     M5Cardputer.Display.fillScreen(TFT_BLACK);
 }
 
-inline void update() { M5Cardputer.update(); }
+inline void update() {
+    M5Cardputer.update();
+    power::tick();
+}
+
 
 inline M5GFX& lcd() { return M5Cardputer.Display; }
 
