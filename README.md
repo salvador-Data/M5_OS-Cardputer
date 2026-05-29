@@ -88,12 +88,14 @@ Clone as a **sibling** of `cyberThreatGotchi` — not inside it:
 ```text
 C:\Users\Owner\Projects\
 ├── cyberThreatGotchi\          ← CTG repo (separate)
-└── M5_OS-Cardputer\            ← clone here
+└── M5_OS-Cardputer\            ← recommended clone location
     ├── platformio.ini          ← PlatformIO project root
     ├── src\                    ← firmware source
     ├── include\
     └── data\
 ```
+
+If you already have `cyberThreatGotchi\M5_OS-Cardputer\` on disk, that folder is a **separate nested git clone** (not a submodule). PlatformIO still works from that path — open the folder that contains `platformio.ini`. Run `git pull` there to stay current, or re-clone to `Projects\M5_OS-Cardputer` as shown above.
 
 ### PlatformIO CLI (PowerShell)
 
