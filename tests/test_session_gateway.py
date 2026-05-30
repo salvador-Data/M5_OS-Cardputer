@@ -77,6 +77,7 @@ def test_keyboard_back_detects_grave_hid():
     assert "keyboardBackEdge" in kb
     held_fn = kb.split("inline bool keyboardBackHeld()")[1].split("inline bool keyboardBackEdge")[0]
     assert "kHidGrave" in held_fn
+    assert "isKeyPressed('`')" in held_fn
     edge_fn = kb.split("inline bool keyboardBackEdge")[1].split("inline bool keyboardBackJustPressed")[0]
     assert "isChange()" not in edge_fn
 

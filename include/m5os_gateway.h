@@ -10,7 +10,7 @@ namespace m5os {
 /** Permanent session gateway (ota_1 / app1). */
 const esp_partition_t* gatewayOtaPartition();
 
-/** True when gateway partition holds a valid ESP image (0xE9 magic only). */
+/** True when app1 holds the current embedded session gateway image. */
 bool gatewayPartitionReady();
 
 /** Optional UI callback: percent 0–100 and short phase label. */

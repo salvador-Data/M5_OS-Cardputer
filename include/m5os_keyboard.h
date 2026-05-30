@@ -15,7 +15,10 @@ inline bool keyboardBackHeld() {
         if (hid == kHidEscape || hid == kHidGrave) return true;
     }
     for (auto key : status.word) {
-        if (key == '`' || key == 27) return true;
+        if (key == '`' || key == '~' || key == 27) return true;
+    }
+    if (M5Cardputer.Keyboard.isKeyPressed('`') || M5Cardputer.Keyboard.isKeyPressed('~')) {
+        return true;
     }
     return false;
 }

@@ -385,7 +385,9 @@ bool runSlotReadyForLaunch(size_t expectedSize) {
     pos.size = slot->size;
     esp_image_metadata_t metadata{};
     if (esp_image_verify(ESP_IMAGE_VERIFY, &pos, &metadata) != ESP_OK) return false;
-    return metadata.image_len == expectedSize;
+    if (metadata.image_len == 0 || metadata.image_len > slot->size) return false;
+    /* SD .bin may include padding past the ESP image; compare canonical image_len. */
+    return metadata.image_len <= expectedSize && expectedSize - metadata.image_len <= 4095;
 }
 
 size_t maxOtaAppBytes() {

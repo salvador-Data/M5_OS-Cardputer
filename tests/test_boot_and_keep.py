@@ -23,7 +23,8 @@ def test_run_slot_ready_helper_exported() -> None:
     assert "runSlotReadyForLaunch" in FLASH_H.read_text(encoding="utf-8")
     flash = FLASH_CPP.read_text(encoding="utf-8")
     fn = flash[flash.index("bool runSlotReadyForLaunch") : flash.index("size_t maxOtaAppBytes")]
-    assert "metadata.image_len == expectedSize" in fn
+    assert "metadata.image_len <= expectedSize" in fn
+    assert "expectedSize - metadata.image_len" in fn
     assert "validateAppImageChipTarget(slot)" in fn
 
 
@@ -44,6 +45,8 @@ def test_gateway_esc_sets_sess_exit_before_home_reboot() -> None:
     assert "kLaunchPendingKey" in fn
     assert fn.index("kSessionExitKey") < fn.index("esp_restart()")
     assert "true" in fn.split("kSessionExitKey")[1].split("esp_restart()")[0]
+    assert "setStagedBootHandoff()" in fn
+    assert fn.index("setStagedBootHandoff()") < fn.index("esp_restart()")
 
 
 def test_gateway_enter_clears_sess_exit_sets_launch_pend() -> None:
@@ -66,3 +69,13 @@ def test_burner_stream_uses_ota_finish_valid_mark() -> None:
     """Burner OTA path ends with otaSlotWriterFinish → shared VALID mark."""
     burner = BURNER_CPP.read_text(encoding="utf-8")
     assert "otaSlotWriterFinish(ctx.otaWriter" in burner
+
+
+def test_m5burner_chains_gateway_when_run_slot_ready() -> None:
+    launcher = APP_LAUNCHER.read_text(encoding="utf-8")
+    fn = launcher[launcher.index("const burner::BurnerFlashResult flash = burner::flashAppToOta") :]
+    fn = fn[: fn.index("return result;", fn.index("if (flash.ok)"))]
+    assert "runSlotReadyForLaunch(plan.appSize)" in fn
+    assert "burner_launch_run_ready" in fn
+    assert "rebootIntoGatewaySession" in fn
+    assert fn.index("runSlotReadyForLaunch") < fn.index("rebootIntoGatewaySession")

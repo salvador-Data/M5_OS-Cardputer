@@ -9,6 +9,7 @@
 #include "serial_log.h"
 
 #include <SD.h>
+#include <esp_image_format.h>
 #include <esp_ota_ops.h>
 #include <nvs.h>
 
@@ -41,6 +42,17 @@ bool partitionHasAppMagic(const esp_partition_t* part) {
     if (!part) return false;
     uint8_t magic = 0;
     return esp_partition_read(part, 0, &magic, 1) == ESP_OK && magic == 0xE9;
+}
+
+/** Reject stale app1 images left by USB partial flash or pre-embed gateway builds. */
+bool gatewayImageMatchesEmbed(const esp_partition_t* gw) {
+    if (!gw || gateway_embed::kSize == 0) return true;
+    esp_partition_pos_t pos{};
+    pos.offset = gw->address;
+    pos.size = gw->size;
+    esp_image_metadata_t metadata{};
+    if (esp_image_verify(ESP_IMAGE_VERIFY, &pos, &metadata) != ESP_OK) return false;
+    return metadata.image_len == gateway_embed::kSize;
 }
 
 bool flashGatewayFromFile(File& f, size_t len, GatewayFlashProgressFn progress) {
@@ -78,7 +90,12 @@ bool gatewayPartitionReady() {
     const esp_partition_t* gw = gatewayOtaPartition();
     const esp_partition_t* run = runSlotOtaPartition();
     if (!gw || !run || gw == run || gw->size < kGatewayPartitionBytes) return false;
-    return partitionHasAppMagic(gw);
+    if (!partitionHasAppMagic(gw)) return false;
+    if (!gatewayImageMatchesEmbed(gw)) {
+        log::info("gw_stale_embed", String(gateway_embed::kSize));
+        return false;
+    }
+    return true;
 }
 
 bool flashGatewayImage(const uint8_t* data, size_t len, GatewayFlashProgressFn progress) {
@@ -100,11 +117,14 @@ bool flashGatewayImage(const uint8_t* data, size_t len, GatewayFlashProgressFn p
         }
     }
 
-    if (!partitionHasAppMagic(gw)) {
+    if (!partitionHasAppMagic(gw) || !gatewayImageMatchesEmbed(gw)) {
         log::info("gw_flash_magic_fail", String(len));
         return false;
     }
-    markPartitionOtaState(gw, ESP_OTA_IMG_VALID);
+    if (!markPartitionOtaState(gw, ESP_OTA_IMG_VALID)) {
+        log::info("gw_flash_otadata_fail", String(len));
+        return false;
+    }
     reportProgress(progress, 100, "Gateway ready");
     log::info("gw_flash_ok", String(len));
     return true;

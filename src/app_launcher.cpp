@@ -659,12 +659,27 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
             if (SD.exists(sdPath.c_str())) {
                 result.message = "Saved to\n" + sdPath + "\nUSB full flash to run";
             }
+        } else if (runSlotReadyForLaunch(plan.appSize)) {
+            session::prepareLaunchSd(sdPath, safeBin, &pkg);
+            LaunchResult launch;
+            launch.ok = true;
+            launch.message = "Rebooting into gateway";
+            log::info("burner_launch_run_ready", safeBin);
+            if (rebootIntoGatewaySession(pkg.name, launch)) {
+                result.ok = true;
+                result.message = launch.message;
+            } else {
+                result.ok = false;
+                result.message = launch.message.length() ? launch.message : "Gateway launch failed";
+            }
         } else if (SD.exists(sdPath.c_str())) {
             LaunchOptions opts;
             opts.skipHash = true;
             LaunchResult launch = launchBinFile(safeBin, opts);
             result.ok = launch.ok;
             result.message = launch.message.length() ? launch.message : flash.message;
+        } else {
+            result.message = "Staged in run slot.\nLoad app from menu.";
         }
     }
 

@@ -72,7 +72,12 @@ void exitToHome() {
     nvsSetFlag(m5os::gateway::kAppSessionKey, true);
     nvsSetFlag(m5os::gateway::kSessionExitKey, true);
     const esp_partition_t* home = homePartition();
-    if (home) esp_ota_set_boot_partition(home);
+    if (!home || esp_ota_set_boot_partition(home) != ESP_OK) {
+        drawFrame("Home boot failed");
+        delay(600);
+        return;
+    }
+    m5os::gateway::setStagedBootHandoff();
     esp_restart();
 }
 
