@@ -2,6 +2,7 @@
 
 #include <M5Cardputer.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 
 namespace m5os::power {
 
@@ -101,6 +102,20 @@ bool isSaving() { return gSaving; }
 bool allowBootChime() { return !gSaving; }
 
 unsigned long uiLoopDelayMs() { return gSaving ? 160 : 80; }
+
+WifiThroughputGuard::WifiThroughputGuard() {
+    if (WiFi.status() != WL_CONNECTED) return;
+    wifi_ps_type_t ps = WIFI_PS_NONE;
+    if (esp_wifi_get_ps(&ps) != ESP_OK) return;
+    prevPs_ = static_cast<int>(ps);
+    if (ps == WIFI_PS_NONE) return;
+    if (esp_wifi_set_ps(WIFI_PS_NONE) == ESP_OK) active_ = true;
+}
+
+WifiThroughputGuard::~WifiThroughputGuard() {
+    if (!active_) return;
+    esp_wifi_set_ps(static_cast<wifi_ps_type_t>(prevPs_));
+}
 
 void drawStatusBar(M5GFX& display) {
     tick();

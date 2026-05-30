@@ -22,4 +22,17 @@ unsigned long uiLoopDelayMs();
 /** Top-right battery bar + optional "SAV" when savings active. */
 void drawStatusBar(M5GFX& display);
 
+/** RAII: disable WiFi modem sleep for bulk HTTPS downloads; restores prior PS mode. */
+class WifiThroughputGuard {
+  public:
+    WifiThroughputGuard();
+    ~WifiThroughputGuard();
+    WifiThroughputGuard(const WifiThroughputGuard&) = delete;
+    WifiThroughputGuard& operator=(const WifiThroughputGuard&) = delete;
+
+  private:
+    bool active_ = false;
+    int prevPs_ = 0;
+};
+
 }  // namespace m5os::power

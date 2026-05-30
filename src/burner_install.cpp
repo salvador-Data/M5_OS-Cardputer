@@ -6,6 +6,7 @@
 #include "m5os_flash.h"
 #include "m5os_security.h"
 #include "m5os_watchdog.h"
+#include "power_manager.h"
 #include "serial_log.h"
 #include "ui_display.h"
 
@@ -24,7 +25,8 @@ constexpr uint32_t kDownloadHttpTimeoutMs = 60000;
 constexpr uint32_t kStreamIdleMinMs = 120000;
 constexpr uint32_t kStreamIdleMaxMs = 300000;
 constexpr uint8_t kHttpMaxAttempts = 3;
-constexpr size_t kStreamChunkBytes = 64;
+constexpr size_t kStreamChunkBytes = security::kSha256IoChunkBytes;
+constexpr size_t kStreamProgressPaintBytes = 32768;
 
 String planTooLargeMessage(uint32_t appSize, size_t otaLimit) {
     return formatAppTooLargeMessage(static_cast<size_t>(appSize), otaLimit);
@@ -260,7 +262,16 @@ struct RangeStreamResult {
 void reportStreamProgress(size_t written, size_t total, const char* label,
                           const char* detailLine, size_t* lastPainted) {
     if (!label || total == 0) return;
-    if (lastPainted && *lastPainted == written) return;
+    if (lastPainted && *lastPainted != SIZE_MAX) {
+        if (written <= *lastPainted) return;
+        if (written < total) {
+            const size_t delta = written - *lastPainted;
+            const int prevPct =
+                static_cast<int>(min(100ULL, (*lastPainted * 100ULL) / total));
+            const int newPct = static_cast<int>(min(100ULL, (written * 100ULL) / total));
+            if (newPct == prevPct && delta < kStreamProgressPaintBytes) return;
+        }
+    }
     if (lastPainted) *lastPainted = written;
 
     const int percent = static_cast<int>(min(100ULL, (written * 100ULL) / total));
@@ -656,6 +667,7 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
 
 BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdPath) {
     BurnerFlashResult result;
+    power::WifiThroughputGuard wifiBoost;
     if (WiFi.status() != WL_CONNECTED) {
         result.message = "WiFi required";
         return result;
@@ -739,6 +751,7 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
 
 BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const String& sdPath) {
     BurnerDownloadResult result;
+    power::WifiThroughputGuard wifiBoost;
     if (WiFi.status() != WL_CONNECTED) {
         result.stage = "WiFi";
         result.message = "WiFi required";
