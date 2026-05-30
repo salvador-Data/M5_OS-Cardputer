@@ -39,8 +39,9 @@ inline bool shouldPromptSessionReturn(bool appSessionActive, bool sessionExitPen
     if (resetReason == ESP_RST_POWERON) return false;
     if (sessionExitPending) return true;
     if (!appSessionActive) return false;
-    return isSessionSwResetExit(resetReason) || isSessionExtResetExit(resetReason) ||
-           isCrashResetReason(resetReason);
+    /* SW reset without sess_exit is foreign-app esp_restart; bootloader stays in run slot. */
+    if (isSessionSwResetExit(resetReason)) return false;
+    return isSessionExtResetExit(resetReason) || isCrashResetReason(resetReason);
 }
 
 /** Cold power-on: restore otadata and drop session NVS without save prompt. */

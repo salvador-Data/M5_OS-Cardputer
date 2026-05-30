@@ -116,9 +116,10 @@ Copy the `.bin` to the printed SD path. Publish the updated manifest to GitHub o
 | **M5 OS panic / watchdog reset** | `CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT` — auto-reboot; on boot `applyCrashResetHomeRestore()` points otadata at saved M5 OS home |
 | **Cold power-on / side reset** | Custom bootloader always boots M5 OS (app0); `applyColdBootHomeRestore()` fixes otadata. Side reset may show save prompt |
 | **ESC/` or BtnA at boot** | Bootloader or `tryEarlyRecoveryBoot()` forces M5 OS home |
-| **Load app reboot (SW reset)** | otadata → session gateway (app1), then app2 after Enter (VALID — no auto-revert) |
+| **Load app reboot (SW reset)** | otadata → session gateway (app1), then app2 after Enter (VALID — no auto-revert). Foreign-app `esp_restart()` during init stays in the run slot (bootloader honors otadata) |
+| **Gateway ESC / `** | SW reset with otadata → M5 OS home; save prompt when `sess_exit` is set |
 
-Third-party apps that crash-loop without hardware reset may still require **side reset**, **power-cycle**, or **BtnA at boot** — M5 OS cannot run code inside a foreign app binary.
+Third-party apps that **crash-loop** (watchdog/panic) without hardware reset may still require **side reset**, **power-cycle**, or **BtnA at boot** — M5 OS cannot run code inside a foreign app binary.
 
 ## Security (implemented)
 

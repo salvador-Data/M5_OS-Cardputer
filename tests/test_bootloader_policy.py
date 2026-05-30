@@ -24,6 +24,18 @@ def test_bootloader_sw_reset_uses_otadata():
     )
 
 
+def test_bootloader_sw_reset_without_magic_honors_otadata():
+    """Loaded apps often esp_restart() during init; must not force app0 on every SW reset."""
+    text = BOOT_C.read_text(encoding="utf-8")
+    assert "m5os_reset_forces_home_boot" in text
+    home_fn = text[text.index("static bool m5os_should_boot_home") : text.index("void __attribute__((noreturn)) call_start_cpu0")]
+    assert "m5os_reset_forces_home_boot()" in home_fn
+    forces = text[text.index("m5os_reset_forces_home_boot") : text.index("static bool m5os_should_boot_home")]
+    assert "RESET_REASON_CHIP_POWER_ON" in forces
+    assert "RESET_REASON_CPU0_SW" in forces
+    assert "RESET_REASON_CHIP_BROWN_OUT" not in forces
+
+
 def test_bootloader_recovery_gpio():
     text = BOOT_C.read_text(encoding="utf-8")
     assert "bootloader_common_check_long_hold_gpio_level" in text

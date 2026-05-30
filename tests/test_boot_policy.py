@@ -43,9 +43,9 @@ def should_prompt_session_return(
         return True
     if not app_session_active:
         return False
-    return is_session_sw_reset_exit(reset_reason) or is_session_ext_reset_exit(reset_reason) or is_crash_reset_reason(
-        reset_reason
-    )
+    if is_session_sw_reset_exit(reset_reason):
+        return False
+    return is_session_ext_reset_exit(reset_reason) or is_crash_reset_reason(reset_reason)
 
 
 def should_power_on_restore_home(reset_reason: int) -> bool:
@@ -101,8 +101,13 @@ def test_cold_power_never_prompts():
     assert not should_prompt_session_return(True, True, True, ESP_RST_POWERON)
 
 
-def test_sw_reset_with_active_session_on_home_prompts():
-    assert should_prompt_session_return(True, False, True, ESP_RST_SW)
+def test_sw_reset_with_active_session_no_prompt_without_exit_flag():
+    """Foreign esp_restart must not show save prompt; gateway ESC sets sess_exit."""
+    assert not should_prompt_session_return(True, False, True, ESP_RST_SW)
+
+
+def test_sw_reset_with_session_exit_pending_prompts():
+    assert should_prompt_session_return(True, True, True, ESP_RST_SW)
 
 
 def test_sw_reset_without_session_no_prompt():

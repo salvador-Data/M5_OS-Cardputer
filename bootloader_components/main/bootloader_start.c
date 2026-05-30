@@ -5,8 +5,9 @@
  * Recovery logic lives in app0; without forcing app0 on hardware reset, users stay
  * in foreign firmware indefinitely.
  *
- * SW reset with RTC handoff magic (set by M5 OS before Load app reboot) boots app1.
- * Any other reset (power-on, side reset, foreign-app esp_restart) boots app0.
+ * SW reset with RTC handoff magic (Load app / gateway launch) honors otadata.
+ * SW reset without magic (foreign-app esp_restart) also honors otadata — stay in run slot.
+ * Hardware reset (power-on, brown-out) and watchdog/panic resets boot app0 (M5 OS home).
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -64,13 +65,39 @@ static bool m5os_sw_reset_is_intentional_launch(void)
     return true;
 }
 
+static bool m5os_reset_forces_home_boot(void)
+{
+    const soc_reset_reason_t reason = esp_rom_get_reset_reason(0);
+    /* ESP32-S3 aliases share numeric values (e.g. POWER_ON == BROWN_OUT == SUPER_WDT). */
+    switch (reason) {
+        case RESET_REASON_CHIP_POWER_ON:
+        case RESET_REASON_SYS_BROWN_OUT:
+        case RESET_REASON_CORE_PWR_GLITCH:
+        case RESET_REASON_CORE_MWDT0:
+        case RESET_REASON_CORE_MWDT1:
+        case RESET_REASON_CORE_RTC_WDT:
+        case RESET_REASON_CPU0_MWDT0:
+        case RESET_REASON_CPU0_MWDT1:
+        case RESET_REASON_CPU0_RTC_WDT:
+        case RESET_REASON_SYS_RTC_WDT:
+        case RESET_REASON_SYS_SUPER_WDT:
+            return true;
+        case RESET_REASON_CPU0_SW:
+        case RESET_REASON_CORE_SW:
+        default:
+            return false;
+    }
+}
+
 static bool m5os_should_boot_home(const bootloader_state_t* bs, int* home_index_out)
 {
     if (m5os_sw_reset_is_intentional_launch()) {
         return false;
     }
-    /* Always reach M5 OS on power-on, side reset, deep-sleep wake, etc.
-     * Only SW reset with RTC handoff magic stays on gateway/app (Load app path). */
+    if (!m5os_reset_forces_home_boot()) {
+        return false;
+    }
+    /* Power-on, brown-out, and watchdog/panic: always M5 OS home (app0). */
     const int home = m5os_home_partition_index(bs);
     if (home == INVALID_INDEX) {
         return false;
