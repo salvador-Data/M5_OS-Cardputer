@@ -19,7 +19,7 @@ namespace m5os {
 
 
 
-/** Foreign-app run slot size (app2, or app1 on legacy 2-slot tables). Not the gateway slot. */
+/** Foreign-app run slot size (app1 on dual-OTA partition table). */
 
 size_t maxOtaAppBytes();
 

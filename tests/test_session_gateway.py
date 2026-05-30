@@ -1,4 +1,4 @@
-"""Contract tests for session gateway launch path."""
+"""Load app uses direct OTA reboot (c27be49); gateway code optional, not on load path."""
 
 from pathlib import Path
 
@@ -6,102 +6,51 @@ ROOT = Path(__file__).resolve().parents[1]
 PARTITIONS = ROOT / "partitions" / "m5os_cardputer_8MB.csv"
 APP_LAUNCHER = ROOT / "src" / "app_launcher.cpp"
 FLASH_CPP = ROOT / "src" / "m5os_flash.cpp"
-GATEWAY_CPP = ROOT / "src" / "m5os_gateway.cpp"
-GATEWAY_MAIN = ROOT / "src" / "session_gateway_main.cpp"
-GATEWAY_H = ROOT / "include" / "m5os_gateway.h"
+MAIN_CPP = ROOT / "src" / "main.cpp"
 README = ROOT / "README.md"
 PLATFORMIO = ROOT / "platformio.ini"
 
 
-def test_three_slot_partition_table():
+def test_dual_slot_partition_table():
     text = PARTITIONS.read_text(encoding="utf-8")
+    assert "app0" in text and "ota_0" in text
     assert "app1" in text and "ota_1" in text
-    assert "app2" in text and "ota_2" in text
-    assert "0x10000" in text
-    assert "0x3C0000" in text
-    assert "0x70000" in text
+    assert "0x400000" in text
+    assert "ota_2" not in text
+    assert "0x70000" not in text
 
 
-def test_gateway_nvs_and_paths():
-    shared = (ROOT / "include" / "m5os_gateway_shared.h").read_text(encoding="utf-8")
-    assert 'kGatewayActiveKey[] = "gw_active"' in shared
-    assert ".staging/run_app.bin" in shared
-
-
-def test_launcher_uses_gateway_session():
+def test_launcher_uses_direct_staged_session():
     text = APP_LAUNCHER.read_text(encoding="utf-8")
-    assert "launchGatewaySession()" in text
-    assert "runSlotOtaPartition()" in text
-    assert "flashEmbeddedGatewayIfNeeded()" in text
-    assert "Installing..." in text
-    assert "esp_partition_write(runSlot" in text
-    assert "launchStagedAppSession()" not in text
+    assert "launchStagedAppSession()" in text
+    assert "resolveLaunchBootPartition()" in text
+    assert "launchGatewaySession()" not in text
+    assert "flashEmbeddedGatewayIfNeeded()" not in text
+    assert "m5os_gateway.h" not in text
+    assert "esp_partition_write(staged" in text
 
 
-def test_gateway_firmware_ui():
-    main = GATEWAY_MAIN.read_text(encoding="utf-8")
-    assert "ESC/` = M5 OS" in main
-    assert "Enter = launch app" in main
-    assert "kMinGatewayUiMs" in main
-    assert "autoLaunchDone" in main
-    assert "m5os_keyboard.h" in main
-    assert "keyboardEnterJustPressed()" in main
-    assert "kAutoLaunchMs = 6000" in (ROOT / "include" / "m5os_gateway_shared.h").read_text(encoding="utf-8")
-    assert "sess_exit" in main or '"sess_exit"' in main
+def test_staged_launch_in_flash_not_gateway():
+    flash = FLASH_CPP.read_text(encoding="utf-8")
+    assert "launchStagedAppSession() { return rebootIntoStagedApp" in flash.replace("\n", " ")
+    gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
+    assert "launchStagedAppSession()" not in gateway
 
 
-def test_gateway_helpers_in_tree():
-    for sym in (
-        "gatewayOtaPartition",
-        "runSlotOtaPartition",
-        "launchGatewaySession",
-        "flashEmbeddedGatewayIfNeeded",
-    ):
-        assert sym in GATEWAY_H.read_text(encoding="utf-8")
-        assert sym in GATEWAY_CPP.read_text(encoding="utf-8")
+def test_boot_does_not_install_gateway():
+    main = MAIN_CPP.read_text(encoding="utf-8")
+    assert "gatewayPartitionReady" not in main
+    assert "Installing session gateway" not in main
 
 
-def test_embedded_gateway_fallback():
-    cpp = GATEWAY_CPP.read_text(encoding="utf-8")
-    assert "m5os_gateway_embed.h" in cpp
-    assert "gateway_embed::kData" in cpp
-    assert "gw_flash_embed_ok" in cpp
-    prebuild = (ROOT / "scripts" / "prebuild_gateway_embed.py").read_text(encoding="utf-8")
-    assert "m5os_gateway_embed.cpp" in prebuild
-    assert "m5os-session-gateway" in prebuild
-
-
-def test_upload_all_target():
-    extra = (ROOT / "scripts" / "upload_all_extra.py").read_text(encoding="utf-8")
-    assert "upload-all" in extra
-    assert "upload-factory" in extra
-    assert "0x3D0000" in extra
+def test_platformio_plain_m5_os_build():
     ini = PLATFORMIO.read_text(encoding="utf-8")
-    assert "upload_all_extra.py" in ini
-    assert "prebuild_gateway_embed.py" in ini
+    assert "prebuild_gateway_embed.py" not in ini
+    assert "upload_all_extra.py" not in ini
+    assert "custom_bootloader" not in ini
 
 
-def test_staged_launch_delegates_to_gateway():
-    gateway = GATEWAY_CPP.read_text(encoding="utf-8")
-    assert "launchStagedAppSession() { return launchGatewaySession();" in gateway.replace("\n", " ")
-    assert "setStagedBootHandoff()" in gateway
-
-
-def test_gateway_rtc_handoff_before_run_slot():
-    main = GATEWAY_MAIN.read_text(encoding="utf-8")
-    launch = main[main.index("void launchRunSlot") : main.index("}  // namespace")]
-    assert "setStagedBootHandoff()" in launch
-    exit_fn = main[main.index("void exitToHome") : main.index("void launchRunSlot")]
-    assert "setStagedBootHandoff()" not in exit_fn
-
-
-def test_platformio_gateway_env():
-    ini = PLATFORMIO.read_text(encoding="utf-8")
-    assert "m5os-session-gateway" in ini
-    assert "session_gateway_main.cpp" in ini
-
-
-def test_readme_documents_esc_scope():
+def test_readme_documents_load_app_reboot():
     readme = README.read_text(encoding="utf-8")
-    assert "session gateway" in readme.lower() or "Session gateway" in readme
-    assert "ESC" in readme
+    assert "Load app" in readme
+    assert "4 MB" in readme or "4MB" in readme or "0x400000" in readme

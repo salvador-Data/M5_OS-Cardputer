@@ -35,11 +35,8 @@ static const char* kDefaultUtmsPackUrl = M5OS_UTMS_PACK_URL;
 static const char* kAppRemotePossibility = "remote_possibility";
 static const char* kAppBleBot = "ble_bot";
 
-/** Max app .bin for SD + OTA run slot (app2 in partitions/m5os_cardputer_8MB.csv). */
-static const size_t kMaxAppBinBytes = 0x3C0000;
-
-/** app1 gateway slot is 448 KiB; legacy 2-slot app1 run partitions are much larger. */
-static const size_t kMinRunSlotPartitionBytes = 0x200000;
+/** Max app .bin for SD + OTA run slot (app1 in partitions/m5os_cardputer_8MB.csv). */
+static const size_t kMaxAppBinBytes = 0x400000;
 
 /** M5 OS menu freeze recovery — TWDT timeout then restore home + reboot. */
 static const uint32_t kWatchdogTimeoutSec = 30;

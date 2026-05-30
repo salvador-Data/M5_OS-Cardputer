@@ -36,8 +36,8 @@ def test_session_marks_staged_valid_before_reboot():
     fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("bool nvsSetFlag")]
     assert "markPartitionOtaState(target, ESP_OTA_IMG_VALID)" in fn
     assert "ESP_OTA_IMG_PENDING_VERIFY" not in fn
-    assert "setRtcBootStagedHandoff()" in fn
-    assert "kRtcBootStagedMagic" in flash or "setRtcBootStagedHandoff" in flash
+    assert "esp_restart()" in fn
+    assert "launchGatewaySession" not in fn
     assert "setAppSessionActive(true)" in flash[flash.index("void beginLaunchSession") : flash.index("void cancelLaunchSession")]
 
 
@@ -82,13 +82,14 @@ def test_launcher_documents_reset_exit():
     assert "Gateway: ESC=OS" in text or "Reset=exit" in text
 
 
-def test_launch_uses_session_gateway():
+def test_launch_uses_direct_staged_session():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
-    assert "launchGatewaySession()" in text
+    assert "launchStagedAppSession()" in text
+    assert "launchGatewaySession()" not in text
 
 
 def test_readme_session_recovery_docs():
     readme = README.read_text(encoding="utf-8")
     assert "Save files before exit" in readme or "save prompt" in readme.lower()
     assert "reset" in readme.lower()
-    assert "session gateway" in readme.lower() or "Session gateway" in readme
+    assert "Load app" in readme

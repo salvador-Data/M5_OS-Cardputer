@@ -4,7 +4,6 @@
 #include "m5os_config.h"
 #include "M5OSDevice.h"
 #include "m5os_flash.h"
-#include "m5os_gateway.h"
 #include "m5os_security.h"
 #include "m5os_watchdog.h"
 #include "serial_log.h"
@@ -216,22 +215,22 @@ struct RangeFlashContext {
     size_t expected = 0;
     size_t written = 0;
     File* sdOut = nullptr;
-    const esp_partition_t* runSlot = nullptr;
+    const esp_partition_t* staged = nullptr;
     bool slotPrepared = false;
 };
 
 bool prepareRunSlotForStream(RangeFlashContext& ctx) {
-    if (ctx.slotPrepared) return ctx.runSlot != nullptr;
-    ctx.runSlot = runSlotOtaPartition();
-    if (!ctx.runSlot || ctx.runSlot == gatewayOtaPartition()) {
+    if (ctx.slotPrepared) return ctx.staged != nullptr;
+    ctx.staged = stagingOtaPartition();
+    if (!ctx.staged) {
         log::info("burner_slot_fail", "layout");
         return false;
     }
-    if (ctx.expected == 0 || ctx.expected > ctx.runSlot->size) {
+    if (ctx.expected == 0 || ctx.expected > ctx.staged->size) {
         log::info("burner_slot_fail", "size");
         return false;
     }
-    if (esp_partition_erase_range(ctx.runSlot, 0, ctx.runSlot->size) != ESP_OK) {
+    if (esp_partition_erase_range(ctx.staged, 0, ctx.staged->size) != ESP_OK) {
         log::info("burner_erase_fail");
         return false;
     }
@@ -242,7 +241,7 @@ bool prepareRunSlotForStream(RangeFlashContext& ctx) {
 
 bool writeFlashChunk(RangeFlashContext& ctx, const uint8_t* data, size_t len) {
     if (!prepareRunSlotForStream(ctx)) return false;
-    if (esp_partition_write(ctx.runSlot, ctx.written, data, len) != ESP_OK) {
+    if (esp_partition_write(ctx.staged, ctx.written, data, len) != ESP_OK) {
         log::info("burner_write_fail");
         return false;
     }
@@ -410,7 +409,7 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
     WiFiClient* stream = http.getStreamPtr();
     ctx.expected = imageSize;
     ctx.sdOut = sdOut;
-    ctx.runSlot = nullptr;
+    ctx.staged = nullptr;
     ctx.slotPrepared = false;
     ctx.written = 0;
 
@@ -439,7 +438,7 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
         if (read <= 0) break;
         if (!writeFlashChunk(ctx, buffer, static_cast<size_t>(read))) {
             ctx.slotPrepared = false;
-            ctx.runSlot = nullptr;
+            ctx.staged = nullptr;
             http.end();
             return false;
         }
@@ -450,16 +449,16 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
 
     if (ctx.written != imageSize) {
         ctx.slotPrepared = false;
-        ctx.runSlot = nullptr;
+        ctx.staged = nullptr;
         log::info("burner_incomplete", String(ctx.written) + "/" + String(imageSize));
         return false;
     }
     uint8_t magic = 0;
-    if (!ctx.runSlot || esp_partition_read(ctx.runSlot, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
+    if (!ctx.staged || esp_partition_read(ctx.staged, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
         log::info("burner_magic_fail");
         return false;
     }
-    markPartitionOtaState(ctx.runSlot, ESP_OTA_IMG_VALID);
+    markPartitionOtaState(ctx.staged, ESP_OTA_IMG_VALID);
     restoreBootToHome();
     return true;
 }
@@ -475,7 +474,7 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
             return true;
         }
         ctx.slotPrepared = false;
-        ctx.runSlot = nullptr;
+        ctx.staged = nullptr;
         ctx.written = 0;
         if (sdOut && (*sdOut)) {
             if (!sdOut->seek(0)) {

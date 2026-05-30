@@ -1,7 +1,6 @@
-# M5 OS Cardputer 8MB — app0 M5 OS, app1 session gateway (448K), app2 run slot (3.75M)
-# Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     0x9000,  0x5000,
-otadata,  data, ota,     0xe000,  0x2000,
-app0,     app,  ota_0,   0x10000, 0x3C0000,
-app1,     app,  ota_1,   0x3D0000,0x70000,
-app2,     app,  ota_2,   0x440000,0x3C0000,
+# M5 OS Cardputer 8MB — dual OTA maximized (no SPIFFS; apps use microSD)
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x3F0000,
+app1,     app,  ota_1,   0x400000,0x400000,

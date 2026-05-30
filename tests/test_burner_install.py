@@ -38,8 +38,8 @@ def _fetch_json(url: str) -> dict:
 
 
 def test_max_app_bin_bytes_matches_partition_table() -> None:
-    assert MAX_APP_BIN_BYTES == 0x3C0000
-    assert MAX_OTA_APP1_BYTES == 0x3C0000
+    assert MAX_APP_BIN_BYTES == 0x400000
+    assert MAX_OTA_APP1_BYTES == 0x400000
 
 
 def test_parse_version_entry_matches_boris_fields() -> None:

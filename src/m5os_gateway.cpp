@@ -325,10 +325,6 @@ bool gatewayExitToHome() {
 
 
 
-bool launchStagedAppSession() { return launchGatewaySession(); }
-
-
-
 bool gatewayLaunchRunSlot() {
 
     const esp_partition_t* run = runSlotOtaPartition();

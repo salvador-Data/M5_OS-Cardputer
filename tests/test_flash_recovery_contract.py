@@ -37,11 +37,9 @@ def test_single_reboot_launch_sets_boot_partition():
     assert "restoreBootToHome()" not in fn
     assert "esp_ota_set_boot_partition(target)" in fn
     assert "m5os_launch_reboot" in fn
-    gateway_h = (ROOT / "include" / "m5os_gateway.h").read_text(encoding="utf-8")
-    gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
-    assert "launchGatewaySession" in gateway_h
-    assert "launchStagedAppSession() { return launchGatewaySession();" in gateway.replace("\n", " ")
-    assert "restoreBootToHome()" not in gateway[gateway.index("bool launchGatewaySession") : gateway.index("bool gatewayExitToHome")]
+    launcher = (ROOT / "src" / "app_launcher.cpp").read_text(encoding="utf-8")
+    assert "launchStagedAppSession()" in launcher
+    assert "launchGatewaySession()" not in launcher
 
 
 def test_launch_fail_detail_wired_in_main():
@@ -57,8 +55,7 @@ def test_recovery_boot_wired_in_main():
     assert "applyCrashResetHomeRestore()" in text
     assert "tryLaunchPendingHandoff()" in text
     assert "saveHomeAppPartition()" in text
-    assert "gatewayPartitionReady()" in text
-    assert "flashEmbeddedGatewayIfNeeded()" in text
+    assert "gatewayPartitionReady()" not in text
     assert "beginWatchdog()" in text
     flash = FLASH_CPP.read_text(encoding="utf-8")
     assert "shouldHardwareResetRestoreHome" in flash
@@ -92,10 +89,7 @@ def test_recovery_helpers_declared():
         "isRunningHomePartition",
     ):
         assert sym in header
-        if sym in ("launchStagedAppSession", "stagingOtaPartition"):
-            assert sym in (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
-        else:
-            assert sym in source
+        assert sym in source
 
 
 def test_flash_progress_ui():

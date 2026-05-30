@@ -260,8 +260,6 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     for (int i = 0; i < 20; ++i) delay(10);
 
-    setRtcBootStagedHandoff();
-
     esp_restart();
 
     return true;
@@ -322,28 +320,13 @@ bool nvsGetFlag(const char* key) {
 
 
 
-namespace {
-
-/** Run slot for Load app (app2); legacy 2-slot tables use large app1 only. */
-const esp_partition_t* runSlotPartitionForLimit() {
-    const esp_partition_t* app2 =
-        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_2, nullptr);
-    if (app2) return app2;
-    const esp_partition_t* app1 =
-        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
-    if (app1 && app1->size >= kMinRunSlotPartitionBytes) return app1;
-    return nullptr;
+const esp_partition_t* stagingOtaPartition() {
+    return esp_ota_get_next_update_partition(nullptr);
 }
 
-}  // namespace
-
 size_t maxOtaAppBytes() {
-    const esp_partition_t* run = runSlotPartitionForLimit();
-    const esp_partition_t* gw =
-        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
-    if (run && run->size > 0) {
-        if (!gw || run != gw) return run->size;
-    }
+    const esp_partition_t* staging = stagingOtaPartition();
+    if (staging && staging->size > 0) return staging->size;
     return kMaxAppBinBytes;
 }
 
@@ -776,6 +759,10 @@ String consumeLaunchFailDetail() {
     return detail;
 
 }
+
+
+
+bool launchStagedAppSession() { return rebootIntoStagedApp("direct"); }
 
 
 

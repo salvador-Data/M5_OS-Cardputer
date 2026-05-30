@@ -40,7 +40,7 @@ Product page: [Hacker Planet Cardputer](https://salvador-Data.github.io/cyberThr
 
 | Feature | Menu item | What it does |
 |---------|-----------|--------------|
-| **Load app** | Load app (ESC/`) | Pick a whitelisted `.bin` from `/apps/<name>/` and flash it into the **app2 run slot** (~3.75 MiB max). Confirm: **Enter** = SHA256 verify (default); **Tab** = fast load (skip hash, still checks ESP magic) |
+| **Load app** | Load app (ESC/`) | Pick a whitelisted `.bin` from `/apps/<name>/` and flash into **app1** run slot (**4 MB** max). **Enter** confirm → one reboot into the app. **Tab** = fast load (skip hash). Side reset / cold power returns M5 OS |
 | **Load from catalog** | Load from catalog | Download manifest entries over Wi-Fi or from SD `/apps/manifest.json` |
 | **Load from M5Burner** | Load from M5Burner catalog | Browse LauncherHub Cardputer apps, stream firmware OTA, save a copy to SD |
 | **SD hard drive** | (automatic on boot) | FAT32 layout: `/system`, `/apps`, `/home/default`, `/tmp`, `/var/log` |
@@ -316,66 +316,27 @@ Shipped catalog entries link Hacker Planet apps:
 
 ---
 
-## ESC recovery, session gateway, and freeze handling
+## Load app, exit paths, and freeze handling
 
-Partition layout (`partitions/m5os_cardputer_8MB.csv`): **app0** = M5 OS (~3.75 MiB), **app1** = **session gateway** (~448 KiB), **app2** = foreign app run slot (~3.75 MiB).
+Partition layout (`partitions/m5os_cardputer_8MB.csv`): **app0** = M5 OS (~3.94 MiB), **app1** = foreign app run slot (**4 MB** / 0x400000).
 
-**Load app** copies the `.bin` to **app2**, then **auto-installs the session gateway into app1** from firmware embedded at build time (SD `/system/m5os_session_gateway.bin` overrides when present), then reboots into the gateway screen.
+**Load app** and **Load from M5Burner catalog** copy the app slice to **app1**, mark the slot **VALID** (not `PENDING_VERIFY`, so foreign `esp_restart()` during init does not roll back), set otadata, and **reboot once** into the loaded firmware. No session gateway screen.
 
-M5 OS also installs the gateway on boot when app1 is empty. Menu → **M5Burner / recovery** → Enter installs it manually if still missing.
+**M5Burner catalog:** streams the app over Wi-Fi, saves a copy under `/apps/<slug>/` on SD (apps coexist; nothing is deleted to switch), then chains **Load app** with Tab fast load when the bin is on SD.
 
-For USB dev flash, use **`scripts/flash_all.ps1`** (app0 + app1) or PlatformIO **`upload-all`** / **`upload-factory`** — plain **`upload`** only writes M5 OS to app0.
-
-**Troubleshooting — “App too large for OTA slot”:** Apps must fit the **app2** run slot (**3.75 MB** / 0x3C0000 bytes), not the small **app1** gateway partition (~448 KiB). Load app now shows **App X.XX MB / slot Y.YY MB — too large** before copying. Use a smaller `.bin`, M5Burner USB full flash, or apps without SPIFFS composite.
-
-| Gateway screen | Result |
-|----------------|--------|
-| **ESC** or **`** | Return to M5 OS → **Save files before exit?** (`y` / `n`) |
-| **Enter** (after ~2 s) | Boots the app in **app2** (auto-launch ~6 s if you wait) |
-
-Custom bootloader policy: **cold power-on** and **side reset** always boot **M5 OS (app0)** even when otadata pointed at app2. **Software reset** from Load app follows otadata (gateway first, then app after Enter).
+**Troubleshooting — “App too large for OTA slot”:** Apps must fit **app1** (**4 MB**). Load app shows **App X.XX MB / slot Y.YY MB — too large** before copying.
 
 | Trigger | Result |
 |---------|--------|
-| **ESC on gateway screen** | M5 OS + save prompt |
-| **ESC/` while M5 OS menu is running** | Recovery splash → home (existing) |
+| **Load app → Enter confirm** | Progress bar → single reboot into app1 |
+| **ESC/` while M5 OS menu is running** | Recovery splash → home |
 | **ESC inside a loaded third-party app** | **Not available** — that firmware owns the keyboard |
-| **Side reset while app loaded** | Bootloader → M5 OS → save prompt |
-| **Cold power switch off/on** | Bootloader → M5 OS home (no save prompt) |
-| **Hold BtnA or ESC/` at power-on** | Bootloader forces M5 OS |
+| **Side reset while app loaded** | M5 OS → **Save files before exit?** (`y` / `n`) when session was active |
+| **Cold power switch off/on** | M5 OS home (no save prompt) |
+| **Hold BtnA or ESC/` at power-on** | Recovery splash → M5 OS |
 | **Menu watchdog (30 s)** | TWDT restores home otadata and reboots |
 
-To exit a running foreign app without power-cycling: press the **Cardputer reset button** (side) or **power off/on**, then answer the save prompt when M5 OS boots. SD saves: `/home/default/apps/<slug>/saves/`.
-
-Build gateway firmware (also runs automatically before M5 OS build):
-
-```powershell
-cd C:\Users\Owner\Projects\M5_OS-Cardputer
-```
-
-```powershell
-.\scripts\build_session_gateway.ps1
-```
-
-**Recommended USB flash (M5 OS + gateway on app1):**
-
-```powershell
-.\scripts\flash_all.ps1 -Port COM13
-```
-
-Or PlatformIO after build:
-
-```powershell
-pio run -e m5stack-cardputer -t upload-all --upload-port COM13
-```
-
-Optional: copy `data\m5os_session_gateway.bin` to microSD `system\` to override the embedded gateway, or flash app1 only:
-
-```powershell
-.\scripts\flash_session_gateway.ps1 -Port COM13
-```
-
-Menu -> **M5Burner / recovery** shows USB and on-device recovery steps.
+USB dev flash: plain **`pio run -t upload`** writes M5 OS to app0 (stock bootloader). Menu → **M5Burner / recovery** shows USB and on-device recovery steps.
 
 ---
 

@@ -11,7 +11,6 @@
 #include "M5OSDevice.h"
 
 #include "m5os_flash.h"
-#include "m5os_gateway.h"
 
 #include "m5os_session.h"
 
@@ -208,18 +207,18 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
     LaunchProgressCtx ctx{appLabel, "Copy to run slot"};
     paintLaunchProgress(0, firmwareSize, &ctx);
 
-    const esp_partition_t* runSlot = runSlotOtaPartition();
-    if (!runSlot || runSlot == gatewayOtaPartition()) {
+    const esp_partition_t* staged = stagingOtaPartition();
+    if (!staged) {
         result.message = "Run slot unavailable\nReflash M5 OS partition table";
         log::info("launch_slot_fail", "layout");
         return false;
     }
-    if (firmwareSize > runSlot->size) {
-        result.message = formatAppTooLargeMessage(firmwareSize, runSlot->size);
-        log::info("launch_size_rejected", String(firmwareSize) + "/" + String(runSlot->size));
+    if (firmwareSize > staged->size) {
+        result.message = formatAppTooLargeMessage(firmwareSize, staged->size);
+        log::info("launch_size_rejected", String(firmwareSize) + "/" + String(staged->size));
         return false;
     }
-    if (esp_partition_erase_range(runSlot, 0, runSlot->size) != ESP_OK) {
+    if (esp_partition_erase_range(staged, 0, staged->size) != ESP_OK) {
         result.message = "Erase run slot failed";
         return false;
     }
@@ -229,7 +228,7 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
     while (firmware.available()) {
         const size_t n = firmware.read(buffer, sizeof(buffer));
         if (n == 0) break;
-        if (esp_partition_write(runSlot, written, buffer, n) != ESP_OK) {
+        if (esp_partition_write(staged, written, buffer, n) != ESP_OK) {
             result.message = "Write failed — M5 OS intact";
             log::info("launch_write_fail");
             return false;
@@ -248,12 +247,12 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
     }
 
     uint8_t magic = 0;
-    if (esp_partition_read(runSlot, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
+    if (esp_partition_read(staged, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
         result.message = "Invalid app image in run slot";
         log::info("launch_magic_fail", String(magic, HEX));
         return false;
     }
-    markPartitionOtaState(runSlot, ESP_OTA_IMG_VALID);
+    markPartitionOtaState(staged, ESP_OTA_IMG_VALID);
     return true;
 }
 
@@ -356,17 +355,16 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
         log::info("launch_cached_ok", cacheKey);
         ui::showMessage("Load app", label + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
 
-        paintLoadAppPhase(98, label, "Gateway", "Installing...");
-        if (!flashEmbeddedGatewayIfNeeded()) {
+        if (!resolveLaunchBootPartition()) {
             cancelLaunchSession();
             result.ok = false;
-            result.message = "Gateway install failed\nUse flash_all.ps1 or SD /system/";
-            log::info("launch_gateway_fail", "cached");
+            result.message = "No valid app in run slot\nRe-copy from SD";
+            log::info("launch_no_target", "cached");
             surfaceLaunchFailure(label, result);
             return result;
         }
 
-        if (launchGatewaySession()) return result;
+        if (launchStagedAppSession()) return result;
 
         cancelLaunchSession();
         result.ok = false;
@@ -402,17 +400,16 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
     log::info("launch_ok", cacheKey);
     ui::showMessage("Load app", label + "\nRebooting...", TFT_GREEN, 1200);
 
-    paintLoadAppPhase(98, label, "Gateway", "Installing...");
-    if (!flashEmbeddedGatewayIfNeeded()) {
+    if (!resolveLaunchBootPartition()) {
         cancelLaunchSession();
         result.ok = false;
-        result.message = "Gateway install failed\nUse flash_all.ps1 or SD /system/";
-        log::info("launch_gateway_fail", "copy");
+        result.message = "No valid app in run slot\nRe-copy from SD";
+        log::info("launch_no_target", "copy");
         surfaceLaunchFailure(label, result);
         return result;
     }
 
-    if (launchGatewaySession()) return result;
+    if (launchStagedAppSession()) return result;
 
     cancelLaunchSession();
     result.ok = false;
