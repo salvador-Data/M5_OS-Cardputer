@@ -26,6 +26,8 @@ jobs:
         run: python scripts/gen_gateway_embed_from_data.py
       - name: Build Cardputer firmware
         run: pio run -e m5stack-cardputer
+      - name: Build session gateway (compile check)
+        run: pio run -e m5os-session-gateway
       - name: Validate manifest JSON
         run: python scripts/validate_manifest.py data/manifest.example.json
       - name: Run host-side tests

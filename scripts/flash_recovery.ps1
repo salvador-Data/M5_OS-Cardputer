@@ -68,13 +68,9 @@ try {
         Write-Host '[2/3] Skip erase (-SkipErase)' -ForegroundColor Yellow
     }
 
-    Write-Host '[3/4] Upload M5 OS + custom bootloader...' -ForegroundColor Cyan
+    Write-Host '[3/3] Upload M5 OS + custom bootloader...' -ForegroundColor Cyan
     & $Pio run -e m5stack-cardputer -t upload --upload-port $Port
     if ($LASTEXITCODE -ne 0) { throw "Upload failed with exit $LASTEXITCODE" }
-
-    Write-Host '[4/4] Upload session gateway to app1...' -ForegroundColor Cyan
-    & "$Repo\scripts\flash_session_gateway.ps1" -Port $Port
-    if ($LASTEXITCODE -ne 0) { throw "Gateway flash failed with exit $LASTEXITCODE" }
 
     Write-Host ''
     Write-Host 'Done. Open serial monitor (115200) to confirm boot:' -ForegroundColor Green

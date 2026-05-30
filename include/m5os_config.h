@@ -38,6 +38,9 @@ static const char* kAppBleBot = "ble_bot";
 /** Max app .bin for SD + OTA run slot (app1 in partitions/m5os_cardputer_8MB.csv). */
 static const size_t kMaxAppBinBytes = 0x400000;
 
+/** Legacy 3-slot gateway on app1 is 448 KiB; run slots are >= 2 MiB (app1 in 2-slot is 4 MiB). */
+static const size_t kMinRunSlotPartitionBytes = 0x200000;
+
 /** M5 OS menu freeze recovery — TWDT timeout then restore home + reboot. */
 static const uint32_t kWatchdogTimeoutSec = 30;
 

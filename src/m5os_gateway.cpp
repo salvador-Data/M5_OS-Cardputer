@@ -127,7 +127,7 @@ const esp_partition_t* runSlotOtaPartition() {
     if (app2) return app2;
     const esp_partition_t* app1 =
         esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
-    if (app1 && app1->size >= 0x200000) return app1;
+    if (app1 && app1->size >= kMinRunSlotPartitionBytes) return app1;
     return nullptr;
 }
 

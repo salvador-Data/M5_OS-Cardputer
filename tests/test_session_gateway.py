@@ -55,3 +55,9 @@ def test_readme_documents_load_app_reboot():
     readme = README.read_text(encoding="utf-8")
     assert "Load app" in readme
     assert "4 MB" in readme or "4MB" in readme or "0x400000" in readme
+
+
+def test_flash_recovery_leaves_app1_empty_for_load_app():
+    """Dual-OTA recovery must not flash legacy session gateway over the app1 run slot."""
+    script = (ROOT / "scripts" / "flash_recovery.ps1").read_text(encoding="utf-8")
+    assert "flash_session_gateway.ps1" not in script

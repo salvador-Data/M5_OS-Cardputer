@@ -19,9 +19,16 @@ def test_config_max_matches_app1_partition():
     cfg = CONFIG_H.read_text(encoding="utf-8")
     part = PARTITIONS.read_text(encoding="utf-8")
     assert "0x400000" in cfg
+    assert "kMinRunSlotPartitionBytes" in cfg
+    assert "0x200000" in cfg
     assert "ota_1" in part
     assert "0x400000" in part
     assert "ota_2" not in part
+
+
+def test_session_gateway_uses_min_run_slot_constant():
+    gw = (ROOT / "src" / "session_gateway_main.cpp").read_text(encoding="utf-8")
+    assert "kMinRunSlotPartitionBytes" in gw
 
 
 def test_burner_uses_staging_not_gateway():
