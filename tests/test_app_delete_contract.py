@@ -28,7 +28,7 @@ def test_load_app_switcher_del_delete_footer_and_confirm():
     switcher = text[text.index("void LauncherMenu::showAppSwitcher") : text.index(
         "void LauncherMenu::showInstalledApps"
     )]
-    assert 'kAppPickerFooter = "Del=delete  Enter=load  `=back"' in text
+    assert 'constexpr const char* kAppPickerFooter = "Del=delete  Enter=load  Gateway: ESC=OS"' in text
     assert "print(kAppPickerFooter)" in switcher
     assert "keyboardDelJustPressed()" in switcher
     assert "keyboardDrainDel()" in switcher
@@ -46,7 +46,7 @@ def test_catalog_picker_del_on_installed_sd_apps():
     catalog = text[text.index("void LauncherMenu::showLoadCatalog") : text.index(
         "void LauncherMenu::showFlashBurnerCatalog"
     )]
-    assert 'kAppPickerFooter = "Del=delete  Enter=load  `=back"' in text
+    assert 'constexpr const char* kAppPickerFooter = "Del=delete  Enter=load  Gateway: ESC=OS"' in text
     assert "print(kAppPickerFooter)" in catalog
     assert "keyboardDelJustPressed()" in catalog
     assert "pkg.installed" in catalog
@@ -79,3 +79,13 @@ def test_wifi_password_still_uses_del_erase_not_app_delete():
     pwd = text[text.index("PasswordPromptResult promptPassword") : text.index("}  // namespace m5os::ui")]
     assert "keyboardWantsErase()" in pwd
     assert "deleteInstalledApp" not in pwd
+
+
+def test_file_explorer_delete_actions() -> None:
+    text = MENU.read_text(encoding="utf-8")
+    assert "promptExplorerAction" in text
+    assert "Delete file" in text
+    assert "Delete folder" in text
+    explorer = text[text.index("void LauncherMenu::showFileExplorer") : text.index("void LauncherMenu::showThemeMenu")]
+    assert "ExplorerEntryAction::DeleteFile" in explorer
+    assert "ExplorerEntryAction::DeleteFolder" in explorer

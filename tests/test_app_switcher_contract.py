@@ -12,7 +12,7 @@ def test_app_switcher_implemented():
     assert "showAppSwitcher" in text
     assert "Load app (ESC/`)" in text
     assert "showAppSwitcher();" in text
-    assert 'kAppPickerFooter = "Del=delete  Enter=load  `=back"' in text
+    assert 'constexpr const char* kAppPickerFooter = "Del=delete  Enter=load  Gateway: ESC=OS"' in text
 
 
 def test_esc_from_main_menu_opens_switcher():

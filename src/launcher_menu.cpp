@@ -74,6 +74,56 @@ bool confirmAndDeleteApp(AppLauncher& launcher, FirmwareCatalog& catalog, const 
     return result.ok;
 }
 
+bool deleteFileAtPath(const String& fullPath) {
+    if (vfs::isProtectedDeletePath(fullPath)) {
+        ui::showMessage("Delete failed", "Protected path", TFT_RED);
+        return false;
+    }
+    String question = "Delete file?\n" + fullPath;
+    if (!ui::promptYesNo("Delete file", question.c_str())) return false;
+    String err;
+    if (vfs::removeFile(fullPath, err)) {
+        ui::showMessage("Deleted", fullPath, TFT_GREEN, 1800);
+        return true;
+    }
+    ui::showMessage("Delete failed", err.length() ? err : String("SD remove error"), TFT_RED);
+    return false;
+}
+
+bool deleteAppFolderAtPath(const String& dirPath) {
+    if (vfs::isProtectedDeletePath(dirPath)) {
+        ui::showMessage("Delete failed", "Protected path", TFT_RED);
+        return false;
+    }
+    String question = "Delete folder?\n" + dirPath;
+    if (!ui::promptYesNo("Delete app", question.c_str())) return false;
+    String err;
+    if (vfs::removeDirectoryTree(dirPath, err)) {
+        ui::showMessage("Deleted", dirPath, TFT_GREEN, 1800);
+        return true;
+    }
+    ui::showMessage("Delete failed", err.length() ? err : String("SD remove error"), TFT_RED);
+    return false;
+}
+
+enum class ExplorerEntryAction { Cancel, OpenOrLoad, DeleteFile, DeleteFolder };
+
+ExplorerEntryAction promptExplorerAction(const String& label, const String& fullPath, bool isDirectory) {
+    static const char* fileActions[] = {"Load app", "Delete file", "Back"};
+    static const char* dirActions[] = {"Open", "Delete folder", "Back"};
+    std::vector<String> labels;
+    if (isDirectory) {
+        for (auto* action : dirActions) labels.push_back(action);
+    } else {
+        for (auto* action : fileActions) labels.push_back(action);
+    }
+    const String title = isDirectory ? String("Folder: ") + label : String("File: ") + label;
+    const int pick = ui::selectFromList(labels, title.c_str());
+    if (pick < 0 || pick == 2) return ExplorerEntryAction::Cancel;
+    if (pick == 0) return ExplorerEntryAction::OpenOrLoad;
+    return isDirectory ? ExplorerEntryAction::DeleteFolder : ExplorerEntryAction::DeleteFile;
+}
+
 }  // namespace
 
 LauncherMenu::LauncherMenu(FirmwareCatalog& catalog, AppLauncher& launcher)
@@ -505,10 +555,31 @@ void LauncherMenu::showFileExplorer(const char* path) {
     String chosen = entries[pick];
     if (chosen.endsWith("/")) {
         chosen.remove(chosen.length() - 1);
-        showFileExplorer(vfs::joinPath(dirPath, chosen).c_str());
+        const String fullPath = vfs::joinPath(dirPath, chosen);
+        const ExplorerEntryAction action = promptExplorerAction(chosen, fullPath, true);
+        if (action == ExplorerEntryAction::Cancel) {
+            showFileExplorer(dirPath.c_str());
+            return;
+        }
+        if (action == ExplorerEntryAction::DeleteFolder) {
+            deleteAppFolderAtPath(fullPath);
+            showFileExplorer(dirPath.c_str());
+            return;
+        }
+        showFileExplorer(fullPath.c_str());
     } else {
         const String fullPath = vfs::joinPath(dirPath, chosen);
         if (chosen.endsWith(".bin")) {
+            const ExplorerEntryAction action = promptExplorerAction(chosen, fullPath, false);
+            if (action == ExplorerEntryAction::Cancel) {
+                showFileExplorer(dirPath.c_str());
+                return;
+            }
+            if (action == ExplorerEntryAction::DeleteFile) {
+                deleteFileAtPath(fullPath);
+                showFileExplorer(dirPath.c_str());
+                return;
+            }
             const LoadConfirmChoice choice = promptLoadAppConfirm(chosen, fullPath);
             if (choice == LoadConfirmChoice::Cancel) {
                 showFileExplorer(dirPath.c_str());
@@ -520,6 +591,12 @@ void LauncherMenu::showFileExplorer(const char* path) {
             m5os::update();
             LaunchResult result = launcher_.launchBinPath(fullPath, opts);
             (void)result;
+            return;
+        }
+        const ExplorerEntryAction action = promptExplorerAction(chosen, fullPath, false);
+        if (action == ExplorerEntryAction::DeleteFile) {
+            deleteFileAtPath(fullPath);
+            showFileExplorer(dirPath.c_str());
             return;
         }
         ui::showMessage("File", fullPath);
