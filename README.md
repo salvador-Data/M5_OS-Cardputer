@@ -326,6 +326,20 @@ Partition layout (`partitions/m5os_cardputer_8MB.csv`): **app0** = M5 OS (~3.94 
 
 **Troubleshooting — “App too large for OTA slot”:** Apps must fit **app1** (**4 MB**). Load app shows **App X.XX MB / slot Y.YY MB — too large** before copying.
 
+**Troubleshooting — snapback to M5 OS after reboot (“App did not start”):** Load app copies via **`esp_ota_begin` / `esp_ota_write` / `esp_ota_end`** (same path as ESP-IDF OTA and Boris Launcher), sets **otadata** with `esp_ota_set_boot_partition`, marks the slot **VALID** (rollback-safe for foreign `esp_restart()` during init), then reboots once. If you land back in M5 OS with an SW reset, the bootloader rejected **app1** — common causes:
+
+| Symptom / log | Likely cause | Fix |
+|---------------|--------------|-----|
+| `launch_composite_reject` / “Merged flash bin” | SD file is a **full flash image** (bootloader + partition table + app at 0x10000), not an app-only `.bin` | Use M5Burner **catalog** (slices app offset) or an **app-only** build artifact |
+| `launch_chip_fail` / “Wrong chip 0x…” | Bin built for **ESP32** or **C3**, not **ESP32-S3** (Cardputer) | Rebuild with `board = m5stack-cardputer` / ESP32-S3 target |
+| `m5os_ota_end_fail` / “Image verify failed” | Corrupt download or truncated file | Re-copy; use Enter (hash verify) not Tab fast load |
+| `m5os_launch_snapback` + boot still `app0` | Prior **otadata** or invalid staged image | Menu → recovery / `scripts/flash_recovery.ps1`; reflash M5 OS then Load app |
+| App needs **SPIFFS** on flash | Composite Bruce/Nemo-style package | **M5Burner USB full flash** — Load app cannot create SPIFFS on this partition table |
+
+On-screen **Load app** debug shows `run:` / `boot:` / `slot:` partition labels, flash offsets, and sizes before copy and reboot. USB serial: `m5os_boot_part`, `m5os_launch_reboot`, `m5os_launch_snapback`, `m5os_launch_snapback_dbg`.
+
+**Honest limit:** M5 OS uses a **dual-OTA** table with **no SPIFFS partition**. Apps that require on-flash SPIFFS/LittleFS still need a **M5Burner USB composite flash** (Boris Launcher “Part Change” schemes). SD-stored copies are fine; running them is not.
+
 | Trigger | Result |
 |---------|--------|
 | **Load app → Enter confirm** | Progress bar → single reboot into app1 |
@@ -367,7 +381,7 @@ M5_OS-Cardputer/
 |   |-- m5os_gc.cpp           # Storage cleanup (boot + menu)
 |   |-- launcher_menu.cpp     # Main menu and sub-screens
 |   |-- firmware_catalog.cpp  # Manifest + SD package manager
-|   |-- app_launcher.cpp      # Flash .bin from SD (Update API)
+|   |-- app_launcher.cpp      # Flash .bin from SD (esp_ota API → app1)
 |   |-- burner_install.cpp    # M5Burner / LauncherHub OTA load
 |   |-- ui_display.cpp        # Keyboard + LCD UI + boot splash
 |   |-- burner_bridge.cpp     # M5Burner recovery workflow

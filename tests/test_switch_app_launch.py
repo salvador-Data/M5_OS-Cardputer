@@ -24,6 +24,7 @@ def test_hash_skip_uses_staging_partition_only():
     assert "stagingOtaPartition()" in text
     assert "tryBootCachedOta" not in text
     skip = text[text.index("bool canSkipFlashToCachedOta") : text.index("void storeLaunchCache")]
+    assert "verifyPartitionAppImage(staging)" in skip
     assert "esp_ota_set_boot_partition" not in skip
 
 
@@ -108,6 +109,7 @@ def test_launch_uses_4k_io_chunks():
     copy = text[text.index("bool copySdToOta") : text.index("LaunchResult launchFromOpenFile")]
     assert "feedWatchdog()" in copy
     assert "written % kIoChunkBytes" in copy
+    assert "otaSlotWriterBegin" in copy
     sec_h = (ROOT / "include" / "m5os_security.h").read_text(encoding="utf-8")
     assert "kSha256IoChunkBytes = 4096" in sec_h
     sec = (ROOT / "src" / "m5os_security.cpp").read_text(encoding="utf-8")
@@ -183,7 +185,7 @@ def test_launch_reopens_sd_file_after_hash():
     assert "launch_reopen_fail" in helper
     reopen = helper[helper.index("firmware.close();") : helper.index("copySdToOta")]
     assert reopen.count("SD.open(path") >= 1
-    assert "launch_magic_fail" in text
+    assert "launch_chip_fail" in text
 
 
 def test_switcher_shows_progress_before_launch():
@@ -220,7 +222,7 @@ def test_fast_load_skip_hash_option():
     assert fn.index("if (userSkipHash)") < fn.index("tryLoadCachedDigest")
     assert "if (!userSkipHash && canSkipFlashToCachedOta" in fn
     assert "if (!userSkipHash) storeLaunchCache" in fn
-    assert "launch_magic_fail" in app
+    assert "launch_chip_fail" in app
 
 
 def test_load_confirm_enter_tab_prompt():
@@ -244,5 +246,5 @@ def test_fast_load_still_copies_with_progress():
     assert "copySdToOta" in fn
     assert fn.index("userSkipHash") < fn.index("copySdToOta")
     copy = text[text.index("bool copySdToOta") : text.index("LaunchResult launchFromOpenFile")]
-    assert "0xE9" in copy
+    assert "validateAppImageChipTarget" in copy
     assert "paintLaunchProgress" in copy

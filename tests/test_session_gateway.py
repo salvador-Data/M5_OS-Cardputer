@@ -27,7 +27,7 @@ def test_launcher_uses_direct_staged_session():
     assert "launchGatewaySession()" not in text
     assert "flashEmbeddedGatewayIfNeeded()" not in text
     assert "m5os_gateway.h" not in text
-    assert "esp_partition_write(staged" in text
+    assert "otaSlotWriterBegin" in text
 
 
 def test_staged_launch_in_flash_not_gateway():

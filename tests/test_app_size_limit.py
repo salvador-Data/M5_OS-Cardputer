@@ -31,7 +31,7 @@ def test_copy_path_rejects_oversize_before_write():
     text = APP_LAUNCHER.read_text(encoding="utf-8")
     copy_fn = text[text.index("bool copySdToOta") : text.index("LaunchResult launchFromOpenFile")]
     assert "formatAppTooLargeMessage" in copy_fn
-    assert copy_fn.index("formatAppTooLargeMessage") < copy_fn.index("esp_partition_erase_range")
+    assert copy_fn.index("formatAppTooLargeMessage") < copy_fn.index("otaSlotWriterBegin")
 
 
 def test_max_loadable_matches_partition():

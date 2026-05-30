@@ -302,9 +302,19 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     beginLaunchSession();
 
-    // VALID (not PENDING_VERIFY): foreign apps often esp_restart() during init; rollback would
+    // Boot partition first, then mark VALID (rollback enabled: set_boot alone leaves NEW).
 
-    // immediately revert to M5 OS before the user can use the loaded firmware.
+    if (!setBootPartitionForLaunch(target)) {
+
+        cancelLaunchSession();
+
+        noteLaunchFail("set_boot");
+
+        return false;
+
+    }
+
+
 
     if (!markPartitionOtaState(target, ESP_OTA_IMG_VALID)) {
 
@@ -322,17 +332,11 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     if (boot != target) {
 
-        if (!setBootPartitionForLaunch(target)) {
+        cancelLaunchSession();
 
-            cancelLaunchSession();
+        noteLaunchFail("set_boot");
 
-            noteLaunchFail("set_boot");
-
-            return false;
-
-        }
-
-        markPartitionOtaState(target, ESP_OTA_IMG_VALID);
+        return false;
 
     }
 
@@ -850,6 +854,8 @@ bool tryHandleLaunchSnapBack() {
 
         log::info("m5os_launch_snapback", boot && boot->label[0] ? boot->label : "unknown");
 
+        log::info("m5os_launch_snapback_dbg", formatOtaSlotDebug());
+
         noteLaunchFail("snapback");
 
         cancelLaunchSession();
@@ -954,7 +960,7 @@ String formatLaunchFailMessage(const String& tag) {
 
     if (tag == "image_verify") return "App image invalid\nWrong chip or corrupt bin";
 
-    if (tag == "snapback") return "App did not start\nNeed ESP32-S3 bin\nCheck serial log";
+    if (tag == "snapback") return "App did not start\nBootloader stayed on M5 OS\nNeed ESP32-S3 app-only bin\n" + formatOtaSlotDebug();
 
     if (tag.length()) return tag;
 
@@ -965,6 +971,188 @@ String formatLaunchFailMessage(const String& tag) {
 
 
 bool launchStagedAppSession() { return rebootIntoStagedApp("direct"); }
+
+
+
+namespace {
+
+constexpr uint8_t kChipIdEsp32S3 = 0x09;
+
+String formatPartitionLine(const char* tag, const esp_partition_t* part) {
+
+    if (!part || !part->label[0]) return String(tag) + ":?";
+
+    char buf[56];
+
+    snprintf(buf, sizeof(buf), "%s:%s 0x%x %u", tag, part->label, part->address,
+
+             static_cast<unsigned>(part->size));
+
+    return String(buf);
+
+}
+
+}  // namespace
+
+
+
+bool otaSlotWriterBegin(OtaSlotWriter& writer, const esp_partition_t* part, size_t imageSize) {
+
+    otaSlotWriterAbort(writer);
+
+    if (!part || imageSize == 0 || imageSize > part->size) return false;
+
+    const esp_err_t err = esp_ota_begin(part, imageSize, &writer.handle);
+
+    if (err != ESP_OK) {
+
+        log::info("m5os_ota_begin_fail", String(static_cast<int>(err)));
+
+        return false;
+
+    }
+
+    writer.part = part;
+
+    writer.expected = imageSize;
+
+    writer.written = 0;
+
+    writer.active = true;
+
+    return true;
+
+}
+
+
+
+bool otaSlotWriterAppend(OtaSlotWriter& writer, const uint8_t* data, size_t len) {
+
+    if (!writer.active || !data || len == 0) return false;
+
+    if (writer.written + len > writer.expected) return false;
+
+    const esp_err_t err = esp_ota_write(writer.handle, data, len);
+
+    if (err != ESP_OK) {
+
+        log::info("m5os_ota_write_fail", String(static_cast<int>(err)));
+
+        otaSlotWriterAbort(writer);
+
+        return false;
+
+    }
+
+    writer.written += len;
+
+    return true;
+
+}
+
+
+
+bool otaSlotWriterFinish(OtaSlotWriter& writer, String* errOut) {
+
+    if (!writer.active) {
+
+        if (errOut) *errOut = "OTA writer inactive";
+
+        return false;
+
+    }
+
+    if (writer.written != writer.expected) {
+
+        if (errOut) *errOut = "Incomplete OTA write";
+
+        otaSlotWriterAbort(writer);
+
+        return false;
+
+    }
+
+    const esp_err_t err = esp_ota_end(writer.handle);
+
+    writer.active = false;
+
+    writer.handle = 0;
+
+    if (err != ESP_OK) {
+
+        log::info("m5os_ota_end_fail", String(static_cast<int>(err)));
+
+        if (errOut) {
+
+            if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
+
+                *errOut = "Image verify failed\nWrong chip or corrupt bin";
+
+            } else {
+
+                *errOut = "OTA finalize failed";
+
+            }
+
+        }
+
+        return false;
+
+    }
+
+    if (!verifyPartitionAppImage(writer.part)) {
+
+        if (errOut) *errOut = "Post-OTA verify failed";
+
+        return false;
+
+    }
+
+    return true;
+
+}
+
+
+
+void otaSlotWriterAbort(OtaSlotWriter& writer) {
+
+    if (writer.active && writer.handle) esp_ota_abort(writer.handle);
+
+    writer = OtaSlotWriter{};
+
+}
+
+
+
+String formatOtaSlotDebug() {
+
+    return formatPartitionLine("run", esp_ota_get_running_partition()) + "\n" +
+
+           formatPartitionLine("boot", esp_ota_get_boot_partition()) + "\n" +
+
+           formatPartitionLine("slot", stagingOtaPartition());
+
+}
+
+
+
+bool validateAppImageChipTarget(const esp_partition_t* part, String* chipDetailOut) {
+
+    if (!part) return false;
+
+    uint8_t hdr[16]{};
+
+    if (esp_partition_read(part, 0, hdr, sizeof(hdr)) != ESP_OK) return false;
+
+    if (hdr[0] != 0xE9) return false;
+
+    const uint8_t chipId = hdr[12];
+
+    if (chipDetailOut) *chipDetailOut = String("0x") + String(chipId, HEX);
+
+    return chipId == kChipIdEsp32S3;
+
+}
 
 
 

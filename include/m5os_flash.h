@@ -7,7 +7,6 @@
 
 
 #include <Arduino.h>
-
 #include <cstddef>
 
 #include <esp_ota_ops.h>
@@ -171,6 +170,27 @@ bool verifyPartitionAppImage(const esp_partition_t* part);
 
 /** Mark a non-running OTA slot state in otadata (e.g. gateway or run slot). */
 bool markPartitionOtaState(const esp_partition_t* part, esp_ota_img_states_t targetState);
+
+/** Incremental SD/network → inactive OTA slot writer (esp_ota_begin/write/end). */
+struct OtaSlotWriter {
+    esp_ota_handle_t handle = 0;
+    const esp_partition_t* part = nullptr;
+    size_t expected = 0;
+    size_t written = 0;
+    bool active = false;
+};
+
+bool otaSlotWriterBegin(OtaSlotWriter& writer, const esp_partition_t* part, size_t imageSize);
+bool otaSlotWriterAppend(OtaSlotWriter& writer, const uint8_t* data, size_t len);
+/** Validates image via esp_ota_end; does not switch boot partition. */
+bool otaSlotWriterFinish(OtaSlotWriter& writer, String* errOut = nullptr);
+void otaSlotWriterAbort(OtaSlotWriter& writer);
+
+/** On-screen / serial debug: running, boot, staging slot labels and sizes. */
+String formatOtaSlotDebug();
+
+/** After write: chip_id in image header must match ESP32-S3 (0x09). */
+bool validateAppImageChipTarget(const esp_partition_t* part, String* chipDetailOut = nullptr);
 
 }  // namespace m5os
 

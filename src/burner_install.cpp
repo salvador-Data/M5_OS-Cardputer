@@ -215,34 +215,33 @@ struct RangeFlashContext {
     size_t expected = 0;
     size_t written = 0;
     File* sdOut = nullptr;
-    const esp_partition_t* staged = nullptr;
-    bool slotPrepared = false;
+    OtaSlotWriter otaWriter{};
 };
 
 bool prepareRunSlotForStream(RangeFlashContext& ctx) {
-    if (ctx.slotPrepared) return ctx.staged != nullptr;
-    ctx.staged = stagingOtaPartition();
-    if (!ctx.staged) {
+    if (ctx.otaWriter.active) return ctx.otaWriter.part != nullptr;
+    const esp_partition_t* staged = stagingOtaPartition();
+    if (!staged) {
         log::info("burner_slot_fail", "layout");
         return false;
     }
-    if (ctx.expected == 0 || ctx.expected > ctx.staged->size) {
+    if (ctx.expected == 0 || ctx.expected > staged->size) {
         log::info("burner_slot_fail", "size");
         return false;
     }
-    if (esp_partition_erase_range(ctx.staged, 0, ctx.staged->size) != ESP_OK) {
-        log::info("burner_erase_fail");
+    if (!otaSlotWriterBegin(ctx.otaWriter, staged, ctx.expected)) {
+        log::info("burner_ota_begin_fail");
         return false;
     }
-    ctx.slotPrepared = true;
     ctx.written = 0;
     return true;
 }
 
 bool writeFlashChunk(RangeFlashContext& ctx, const uint8_t* data, size_t len) {
     if (!prepareRunSlotForStream(ctx)) return false;
-    if (esp_partition_write(ctx.staged, ctx.written, data, len) != ESP_OK) {
+    if (!otaSlotWriterAppend(ctx.otaWriter, data, len)) {
         log::info("burner_write_fail");
+        otaSlotWriterAbort(ctx.otaWriter);
         return false;
     }
     if (ctx.sdOut && (*ctx.sdOut)) {
@@ -409,8 +408,7 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
     WiFiClient* stream = http.getStreamPtr();
     ctx.expected = imageSize;
     ctx.sdOut = sdOut;
-    ctx.staged = nullptr;
-    ctx.slotPrepared = false;
+    otaSlotWriterAbort(ctx.otaWriter);
     ctx.written = 0;
 
     uint8_t buffer[kStreamChunkBytes];
@@ -437,8 +435,7 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
         const int read = stream->readBytes(buffer, want);
         if (read <= 0) break;
         if (!writeFlashChunk(ctx, buffer, static_cast<size_t>(read))) {
-            ctx.slotPrepared = false;
-            ctx.staged = nullptr;
+            otaSlotWriterAbort(ctx.otaWriter);
             http.end();
             return false;
         }
@@ -448,17 +445,19 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
     http.end();
 
     if (ctx.written != imageSize) {
-        ctx.slotPrepared = false;
-        ctx.staged = nullptr;
+        otaSlotWriterAbort(ctx.otaWriter);
         log::info("burner_incomplete", String(ctx.written) + "/" + String(imageSize));
         return false;
     }
-    uint8_t magic = 0;
-    if (!ctx.staged || esp_partition_read(ctx.staged, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
-        log::info("burner_magic_fail");
+    String otaErr;
+    if (!otaSlotWriterFinish(ctx.otaWriter, &otaErr)) {
+        log::info("burner_ota_end_fail", otaErr);
         return false;
     }
-    markPartitionOtaState(ctx.staged, ESP_OTA_IMG_VALID);
+    if (!validateAppImageChipTarget(ctx.otaWriter.part)) {
+        log::info("burner_chip_fail");
+        return false;
+    }
     restoreBootToHome();
     return true;
 }
@@ -473,8 +472,7 @@ bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File
                                  detailLine, ctx)) {
             return true;
         }
-        ctx.slotPrepared = false;
-        ctx.staged = nullptr;
+        otaSlotWriterAbort(ctx.otaWriter);
         ctx.written = 0;
         if (sdOut && (*sdOut)) {
             if (!sdOut->seek(0)) {

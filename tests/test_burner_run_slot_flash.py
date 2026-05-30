@@ -14,9 +14,11 @@ def test_burner_stream_uses_staging_slot_not_update_api() -> None:
     text = BURNER_CPP.read_text(encoding="utf-8")
     assert "stagingOtaPartition()" in text
     assert "Update.begin" not in text
-    fn = text[text.index("bool streamRangeToOtaOnce") : text.index("bool streamRangeToOta(")]
-    assert "esp_partition_write" in text
-    assert "markPartitionOtaState(ctx.staged" in fn
+    fn = text[text.index("bool prepareRunSlotForStream") : text.index("bool streamRangeToOtaOnce")]
+    assert "otaSlotWriterBegin" in fn
+    assert "writeFlashChunk" in text
+    assert "otaSlotWriterFinish" in text
+    assert "markPartitionOtaState(ctx.staged" not in fn
     assert "m5os_gateway.h" not in text
 
 

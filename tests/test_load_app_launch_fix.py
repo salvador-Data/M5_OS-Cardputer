@@ -22,11 +22,31 @@ def test_reboot_sets_rtc_handoff_and_skip_validate_fallback():
     fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("bool nvsSetFlag")]
     assert "setRtcBootStagedHandoff()" in fn
     assert "setBootPartitionForLaunch(target)" in fn
+    assert fn.index("setBootPartitionForLaunch(target)") < fn.index("markPartitionOtaState(target")
     assert "verifyPartitionAppImage(target)" in fn
     assert 'noteLaunchFail("otadata")' in fn
     assert "setLaunchPending(true)" in fn
     assert "clearLaunchPending()" not in fn
     assert "feedWatchdog()" in fn
+
+
+def test_copy_uses_esp_ota_api():
+    launcher = APP_LAUNCHER.read_text(encoding="utf-8")
+    copy = launcher[launcher.index("bool copySdToOta") : launcher.index("LaunchResult launchFromOpenFile")]
+    assert "otaSlotWriterBegin" in copy
+    assert "esp_ota_write" not in copy  # via otaSlotWriterAppend in flash.cpp
+    assert "esp_partition_write" not in copy
+    assert "detectMergedFlashBin" in launcher
+    assert "validateAppImageChipTarget" in copy
+    flash = FLASH_CPP.read_text(encoding="utf-8")
+    assert "esp_ota_begin" in flash
+    assert "esp_ota_end" in flash
+
+
+def test_snapback_logs_slot_debug():
+    flash = FLASH_CPP.read_text(encoding="utf-8")
+    fn = flash[flash.index("bool tryHandleLaunchSnapBack") : flash.index("void logBootPartitionContext")]
+    assert "formatOtaSlotDebug()" in fn
 
 
 def test_verify_partition_app_image_exported():
@@ -40,8 +60,8 @@ def test_launcher_surfaces_specific_reboot_failures():
     launcher = APP_LAUNCHER.read_text(encoding="utf-8")
     assert "surfaceLaunchRebootFailure" in launcher
     assert "formatLaunchFailMessage" in launcher
-    assert "verifyPartitionAppImage(staged)" in launcher
-    assert "launch_otadata_fail" in launcher
+    assert "validateAppImageChipTarget" in launcher
+    assert "launch_chip_fail" in launcher
     assert "Copy OK, reboot failed" not in launcher
 
 

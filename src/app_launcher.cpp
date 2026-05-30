@@ -74,6 +74,31 @@ void paintLoadAppPhase(int percent, const String& appLabel, const char* phase, c
     m5os::update();
 }
 
+void paintLoadAppDebugPhase(int percent, const String& appLabel, const char* phase) {
+    paintLoadAppPhase(percent, appLabel, phase, formatOtaSlotDebug());
+}
+
+bool detectMergedFlashBin(File& firmware, size_t fileSize) {
+    if (fileSize < 0x10000) return false;
+    const size_t savedPos = firmware.position();
+    uint8_t magic[2]{};
+    if (firmware.seek(0x8000) && firmware.read(magic, 2) == 2) {
+        if (magic[0] == 0xAA && magic[1] == 0x50) {
+            firmware.seek(savedPos);
+            return true;
+        }
+    }
+    uint8_t head = 0;
+    uint8_t appHead = 0;
+    if (firmware.seek(0) && firmware.read(&head, 1) == 1 && firmware.seek(0x10000) &&
+        firmware.read(&appHead, 1) == 1 && head == 0xE9 && appHead == 0xE9) {
+        firmware.seek(savedPos);
+        return true;
+    }
+    firmware.seek(savedPos);
+    return false;
+}
+
 void surfaceLaunchFailure(const String& appLabel, LaunchResult& result) {
     paintLoadAppPhase(0, appLabel, "Failed", result.message);
     ui::showMessage("Load app failed", result.message, TFT_RED);
@@ -126,11 +151,9 @@ bool canSkipFlashToCachedOta(const String& binFile, const String& sha256) {
 
 
 
-    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    if (!verifyPartitionAppImage(staging)) return false;
 
-    if (esp_ota_get_state_partition(staging, &state) != ESP_OK) return false;
-
-    if (state != ESP_OTA_IMG_VALID && state != ESP_OTA_IMG_PENDING_VERIFY) return false;
+    if (!validateAppImageChipTarget(staging)) return false;
 
 
 
@@ -210,7 +233,7 @@ void storeLaunchCache(const String& binFile, const String& sha256, size_t firmwa
 
 bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, LaunchResult& result) {
     LaunchProgressCtx ctx{appLabel, "Copy to run slot"};
-    paintLaunchProgress(0, firmwareSize, &ctx);
+    paintLoadAppDebugPhase(0, appLabel, ctx.phase);
 
     const esp_partition_t* staged = stagingOtaPartition();
     if (!staged) {
@@ -223,17 +246,28 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
         log::info("launch_size_rejected", String(firmwareSize) + "/" + String(staged->size));
         return false;
     }
-    if (esp_partition_erase_range(staged, 0, staged->size) != ESP_OK) {
-        result.message = "Erase run slot failed";
+    if (detectMergedFlashBin(firmware, firmwareSize)) {
+        result.message =
+            "Merged flash bin\nUse app-only .bin\n(not 0x10000 composite)\nOr M5Burner catalog";
+        log::info("launch_composite_reject", appLabel);
+        return false;
+    }
+
+    OtaSlotWriter writer;
+    if (!otaSlotWriterBegin(writer, staged, firmwareSize)) {
+        result.message = "OTA begin failed\nReflash M5 OS";
+        log::info("launch_ota_begin_fail", staged->label);
         return false;
     }
 
     uint8_t buffer[kIoChunkBytes];
     size_t written = 0;
+    firmware.seek(0);
     while (firmware.available()) {
         const size_t n = firmware.read(buffer, sizeof(buffer));
         if (n == 0) break;
-        if (esp_partition_write(staged, written, buffer, n) != ESP_OK) {
+        if (!otaSlotWriterAppend(writer, buffer, n)) {
+            otaSlotWriterAbort(writer);
             result.message = "Write failed — M5 OS intact";
             log::info("launch_write_fail");
             return false;
@@ -246,27 +280,28 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
     }
 
     if (written != firmwareSize) {
+        otaSlotWriterAbort(writer);
         result.message = "Read incomplete " + String(written) + "/" + String(firmwareSize);
         log::info("launch_read_incomplete", String(written));
         return false;
     }
 
-    uint8_t magic = 0;
-    if (esp_partition_read(staged, 0, &magic, 1) != ESP_OK || magic != 0xE9) {
-        result.message = "Invalid app image in run slot";
-        log::info("launch_magic_fail", String(magic, HEX));
+    String otaErr;
+    if (!otaSlotWriterFinish(writer, &otaErr)) {
+        result.message = otaErr.length() ? otaErr : "OTA finalize failed";
+        log::info("launch_ota_end_fail", otaErr);
         return false;
     }
-    if (!verifyPartitionAppImage(staged)) {
-        result.message = "App image invalid\nWrong chip or corrupt bin";
-        log::info("launch_image_fail", staged->label);
+
+    String chipDetail;
+    if (!validateAppImageChipTarget(staged, &chipDetail)) {
+        result.message = "Wrong chip " + chipDetail + "\nNeed ESP32-S3 bin";
+        log::info("launch_chip_fail", chipDetail);
         return false;
     }
-    if (!markPartitionOtaState(staged, ESP_OTA_IMG_VALID)) {
-        result.message = "otadata update failed\nReflash M5 OS";
-        log::info("launch_otadata_fail");
-        return false;
-    }
+
+    paintLoadAppDebugPhase(100, appLabel, "Copy OK");
+    log::info("launch_copy_ok", staged->label + " chip" + chipDetail);
     return true;
 }
 
@@ -305,6 +340,15 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
             result.message = formatAppTooLargeMessage(firmwareSize, otaLimit);
         }
         log::info("launch_size_rejected", cacheKey + " " + String(firmwareSize) + "/" + String(otaLimit));
+        surfaceLaunchFailure(label, result);
+        return result;
+    }
+
+    if (detectMergedFlashBin(firmware, firmwareSize)) {
+        firmware.close();
+        result.message =
+            "Merged flash bin\nUse app-only .bin\n(not 0x10000 composite)\nOr M5Burner catalog";
+        log::info("launch_composite_reject", cacheKey);
         surfaceLaunchFailure(label, result);
         return result;
     }
@@ -407,11 +451,12 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     if (!userSkipHash) storeLaunchCache(cacheKey, sdDigest, firmwareSize, fileMtime);
 
-    paintLoadAppPhase(100, label, "Rebooting");
+    paintLoadAppDebugPhase(100, label, "Rebooting");
     result.ok = true;
     result.message = "Rebooting into app";
     log::info("launch_ok", cacheKey);
-    ui::showMessage("Load app", label + "\nRebooting...", TFT_GREEN, 1200);
+    log::info("launch_boot_dbg", formatOtaSlotDebug());
+    ui::showMessage("Load app", label + "\nRebooting...\n" + formatOtaSlotDebug(), TFT_GREEN, 1200);
 
     if (!resolveLaunchBootPartition()) {
         cancelLaunchSession();
