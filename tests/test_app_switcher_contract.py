@@ -12,7 +12,7 @@ def test_app_switcher_implemented():
     assert "showAppSwitcher" in text
     assert "Load app (ESC/`)" in text
     assert "showAppSwitcher();" in text
-    assert "Tab next" in text or "keysState().tab" in text
+    assert 'kAppPickerFooter = "Del=delete  Enter=load  `=back"' in text
 
 
 def test_esc_from_main_menu_opens_switcher():

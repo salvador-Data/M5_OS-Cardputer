@@ -513,4 +513,143 @@ bool ensureDirectoryChain(const char* path, String* failReason) {
     return ensureDirectoryChainInner(path, failReason);
 }
 
+bool isProtectedDeletePath(const String& vfsPath) {
+    const String normalized = normalizeVfsPath(vfsPath.c_str());
+    if (!normalized.length() || normalized == "/") return true;
+    if (normalized == kAppsManifestPath || normalized == kLegacyManifestPath) return true;
+    if (normalized == kSettingsPath || normalized == kSystemMarkerPath || normalized == kLegacyMarkerPath) {
+        return true;
+    }
+    if (normalized == kSystemDir || normalized.startsWith(String(kSystemDir) + "/")) return true;
+    if (normalized == kHomeDir || normalized == kHomeDefaultDir) return true;
+    if (normalized == kAppsDir || normalized == kHomeAppsDir) return true;
+    if (normalized == kUtmsDir || normalized.startsWith(String(kUtmsDir) + "/")) return true;
+    if (normalized == kVarLogDir || normalized.startsWith(String(kVarLogDir) + "/")) return true;
+    if (normalized == kTmpDir) return true;
+    return false;
+}
+
+bool removeFile(const String& vfsPath, String& errOut) {
+    errOut = "";
+    const String normalized = normalizeVfsPath(vfsPath.c_str());
+    if (!normalized.length()) {
+        errOut = "Empty path";
+        return false;
+    }
+    if (isProtectedDeletePath(normalized)) {
+        errOut = "Protected path";
+        return false;
+    }
+    if (pathKind(normalized.c_str()) != PathKind::kFile) {
+        errOut = "Not a file:\n" + normalized;
+        return false;
+    }
+    errno = 0;
+    if (!SD.remove(normalized.c_str())) {
+        errOut = String("Remove failed:\n") + normalized + errnoHint(errno);
+        return false;
+    }
+    log::info("vfs_file_removed", normalized);
+    return true;
+}
+
+bool removeDirectoryTree(const String& vfsPath, String& errOut) {
+    errOut = "";
+    const String normalized = normalizeVfsPath(vfsPath.c_str());
+    if (!normalized.length() || normalized == "/") {
+        errOut = "Invalid path";
+        return false;
+    }
+    if (isProtectedDeletePath(normalized)) {
+        errOut = "Protected path";
+        return false;
+    }
+    if (pathKind(normalized.c_str()) != PathKind::kDirectory) {
+        errOut = "Not a directory:\n" + normalized;
+        return false;
+    }
+
+    File dir = SD.open(normalized.c_str());
+    if (!dir || !dir.isDirectory()) {
+        errOut = "Cannot open:\n" + normalized;
+        if (dir) dir.close();
+        return false;
+    }
+
+    File entry;
+    while ((entry = dir.openNextFile())) {
+        const String entryName = entry.name();
+        const bool isDir = entry.isDirectory();
+        entry.close();
+        const String leaf = entryBaseName(entryName);
+        if (!leaf.length() || leaf == "." || leaf == "..") continue;
+        const String child = joinPath(normalized, leaf);
+        if (isDir) {
+            if (!removeDirectoryTree(child, errOut)) {
+                dir.close();
+                return false;
+            }
+            errno = 0;
+            if (!SD.rmdir(child.c_str())) {
+                errOut = String("rmdir failed:\n") + child + errnoHint(errno);
+                dir.close();
+                return false;
+            }
+        } else if (!removeFile(child, errOut)) {
+            dir.close();
+            return false;
+        }
+    }
+    dir.close();
+
+    errno = 0;
+    if (!SD.rmdir(normalized.c_str())) {
+        errOut = String("rmdir failed:\n") + normalized + errnoHint(errno);
+        return false;
+    }
+    log::info("vfs_dir_removed", normalized);
+    return true;
+}
+
+bool removeApp(const String& appSlug, String& errOut) {
+    errOut = "";
+    const String slug = slugFromName(appSlug);
+    if (!slug.length()) {
+        errOut = "Invalid app slug";
+        return false;
+    }
+    const String appDir = appDirFor(slug);
+    const String dataDir = appDataDirFor(slug);
+    if (!appDir.length()) {
+        errOut = "Invalid app slug";
+        return false;
+    }
+
+    bool removed = false;
+    if (SD.exists(appDir.c_str())) {
+        if (!removeDirectoryTree(appDir, errOut)) return false;
+        removed = true;
+    }
+    if (SD.exists(dataDir.c_str())) {
+        if (!removeDirectoryTree(dataDir, errOut)) return false;
+        removed = true;
+    }
+
+    const String legacyBin = security::sanitizeBinFilename(slug + ".bin");
+    if (legacyBin.length()) {
+        const String legacyPath = String(kLegacyFirmwareDir) + "/" + legacyBin;
+        if (SD.exists(legacyPath.c_str())) {
+            if (!removeFile(legacyPath, errOut)) return false;
+            removed = true;
+        }
+    }
+
+    if (!removed) {
+        errOut = "App not on SD:\n" + slug;
+        return false;
+    }
+    log::info("app_removed", slug);
+    return true;
+}
+
 }  // namespace m5os::vfs

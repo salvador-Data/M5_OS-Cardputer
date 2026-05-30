@@ -187,3 +187,65 @@ def full_cleanup(root: Path, whitelisted_slugs: set[str], user_confirmed: bool, 
     report.cache_removed += cache.cache_removed
     report.bytes_reclaimed += cache.bytes_reclaimed
     return report
+
+
+PROTECTED_DELETE_EXACT = {
+    "/",
+    "/apps",
+    "/apps/manifest.json",
+    "/manifest.json",
+    "/home",
+    "/home/default",
+    "/home/default/apps",
+    "/home/default/settings.json",
+    "/system",
+    "/home/default/utms",
+    "/tmp",
+    "/var/log",
+}
+
+PROTECTED_DELETE_PREFIXES = (
+    "/system/",
+    "/home/default/utms/",
+    "/var/log/",
+)
+
+
+def is_protected_delete_path(vfs_path: str) -> bool:
+    path = vfs_path.rstrip("/") if vfs_path not in {"/", ""} else vfs_path
+    if not path or path == "/":
+        return True
+    if path in PROTECTED_DELETE_EXACT:
+        return True
+    return any(path.startswith(prefix) for prefix in PROTECTED_DELETE_PREFIXES)
+
+
+def app_delete_paths(slug: str) -> tuple[str, str, str]:
+    safe = sanitize_path_segment(slug)
+    return app_dir(safe), app_data_dir(safe), f"/firmware/{safe}.bin"
+
+
+def remove_tree(root: Path) -> None:
+    if not root.exists():
+        return
+    if root.is_file():
+        root.unlink(missing_ok=True)
+        return
+    for child in sorted(root.iterdir(), reverse=True):
+        remove_tree(child)
+    root.rmdir()
+
+
+def remove_app_on_host(sd_root: Path, slug: str) -> bool:
+    app_path, data_path, legacy_bin = app_delete_paths(slug)
+    removed = False
+    for rel in (app_path, data_path):
+        target = sd_root / rel.lstrip("/")
+        if target.exists():
+            remove_tree(target)
+            removed = True
+    legacy = sd_root / legacy_bin.lstrip("/")
+    if legacy.is_file():
+        legacy.unlink()
+        removed = True
+    return removed

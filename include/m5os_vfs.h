@@ -80,4 +80,16 @@ bool ensureAppSavesDir(const String& appSlug);
 /** Create a path and every missing parent (absolute VFS paths only). */
 bool ensureDirectoryChain(const char* path, String* failReason = nullptr);
 
+/** True for M5 OS / gateway paths that must never be deleted from the menu. */
+bool isProtectedDeletePath(const String& vfsPath);
+
+/** Remove a single SD file (not a directory). */
+bool removeFile(const String& vfsPath, String& errOut);
+
+/** Recursively remove a directory tree (must not be protected). */
+bool removeDirectoryTree(const String& vfsPath, String& errOut);
+
+/** Remove /apps/<slug>/ and /home/default/apps/<slug>/ (compartment + per-app data). */
+bool removeApp(const String& appSlug, String& errOut);
+
 }  // namespace m5os::vfs

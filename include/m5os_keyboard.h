@@ -112,4 +112,33 @@ inline void keyboardDrainTab() {
     }
 }
 
+constexpr uint8_t kHidBackspace = 0x2a;
+
+inline bool keyboardDelHeld() {
+    if (!M5Cardputer.Keyboard.isPressed()) return false;
+    const auto status = M5Cardputer.Keyboard.keysState();
+    if (status.del) return true;
+    for (uint8_t hid : status.hid_keys) {
+        if (hid == kHidBackspace) return true;
+    }
+    return false;
+}
+
+inline bool keyboardDelJustPressed() {
+    if (!M5Cardputer.Keyboard.isChange()) return false;
+    return keyboardDelHeld();
+}
+
+inline void keyboardDrainDel() {
+    for (int i = 0; i < 24; ++i) {
+        M5Cardputer.update();
+        if (!M5Cardputer.Keyboard.isChange() && !keyboardDelHeld()) break;
+        delay(5);
+    }
+    while (keyboardDelHeld()) {
+        M5Cardputer.update();
+        delay(10);
+    }
+}
+
 }  // namespace m5os

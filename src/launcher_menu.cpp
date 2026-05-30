@@ -59,6 +59,21 @@ LoadConfirmChoice promptLoadAppConfirm(const String& line1, const String& line2)
     }
 }
 
+constexpr const char* kAppPickerFooter = "Del=delete  Enter=load  Gateway: ESC=OS";
+
+bool confirmAndDeleteApp(AppLauncher& launcher, FirmwareCatalog& catalog, const FirmwarePackage& pkg) {
+    String question = "Delete " + pkg.name + "? y/n";
+    if (!ui::promptYesNo("Delete app", question.c_str())) return false;
+    AppDeleteResult result = launcher.deleteInstalledApp(pkg);
+    if (result.ok) {
+        catalog.scanInstalled();
+        ui::showMessage("Deleted", result.message, TFT_GREEN, 2200);
+    } else {
+        ui::showMessage("Delete failed", result.message, TFT_RED);
+    }
+    return result.ok;
+}
+
 }  // namespace
 
 LauncherMenu::LauncherMenu(FirmwareCatalog& catalog, AppLauncher& launcher)
@@ -95,87 +110,99 @@ void LauncherMenu::showAppSwitcher() {
         showSdRequired("Load app needs SD");
         return;
     }
-    catalog_.scanInstalled();
-    const auto& installed = catalog_.installed();
-    if (installed.empty()) {
-        ui::showMessage("Load app", "No apps on SD\nLoad from catalog", TFT_YELLOW);
-        return;
-    }
-
-    int index = 0;
-    int scroll = 0;
-    int lastIndex = -1;
-    int lastScroll = -1;
-    constexpr int kVisible = 6;
-
-    auto redrawSwitcher = [&]() {
-        ui::drawHeader("Load app");
-        if (index < scroll) scroll = index;
-        if (index >= scroll + kVisible) scroll = index - kVisible + 1;
-
-        for (int row = 0; row < kVisible; ++row) {
-            const int i = scroll + row;
-            const int y = 24 + row * 14;
-            m5os::lcd().fillRect(4, y - 2, m5os::lcd().width() - 8, 14, TFT_BLACK);
-            if (i >= static_cast<int>(installed.size())) continue;
-            m5os::lcd().setCursor(8, y);
-            String line = installed[i].name;
-            if (installed[i].version.length()) line += " v" + installed[i].version;
-            if (i == index) {
-                m5os::lcd().setTextColor(ui::theme().primary, ui::theme().secondary);
-                m5os::lcd().printf("> %s", line.c_str());
-            } else {
-                m5os::lcd().setTextColor(ui::theme().secondary, TFT_BLACK);
-                m5os::lcd().printf("  %s", line.c_str());
-            }
-        }
-
-        m5os::lcd().setTextColor(TFT_WHITE, TFT_BLACK);
-        m5os::lcd().setCursor(4, 108);
-        m5os::lcd().print("Enter load app  Tab next");
-        m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
-        m5os::lcd().setCursor(4, 118);
-        m5os::lcd().print("Gateway: ESC=OS Enter=run");
-        lastIndex = index;
-        lastScroll = scroll;
-    };
-
-    redrawSwitcher();
 
     while (true) {
-        if (index != lastIndex || scroll != lastScroll) redrawSwitcher();
-
-        m5os::update();
-        Buttons keys = ui::readButtonsExtended();
-        if (keys.help) {
-            ui::drawHelpOverlay();
-            continue;
-        }
-        if (keys.up) index = (index > 0) ? index - 1 : static_cast<int>(installed.size()) - 1;
-        if (keys.down) index = (index + 1) % static_cast<int>(installed.size());
-        if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
-            if (M5Cardputer.Keyboard.keysState().tab) {
-                index = (index + 1) % static_cast<int>(installed.size());
-            }
-        }
-        if (keys.back || m5os::keyboardBackJustPressed()) return;
-        if (keys.ok || m5os::keyboardEnterJustPressed()) {
-            const auto& pkg = installed[index];
-            const LoadConfirmChoice choice = promptLoadAppConfirm(
-                pkg.name, pkg.description.length() ? pkg.description : "Field firmware");
-            if (choice == LoadConfirmChoice::Cancel) {
-                redrawSwitcher();
-                continue;
-            }
-            LaunchOptions opts;
-            opts.skipHash = choice == LoadConfirmChoice::FastLoad;
-            ui::showFlashProgress(0, "Load app", pkg.name + "\nStarting...");
-            m5os::update();
-            LaunchResult result = launcher_.launchBinFile(pkg.binFile, opts);
-            (void)result;
+        catalog_.scanInstalled();
+        const auto& installed = catalog_.installed();
+        if (installed.empty()) {
+            ui::showMessage("Load app", "No apps on SD\nLoad from catalog", TFT_YELLOW);
             return;
         }
-        delay(power::uiLoopDelayMs());
+
+        int index = 0;
+        int scroll = 0;
+        int lastIndex = -1;
+        int lastScroll = -1;
+        constexpr int kVisible = 6;
+
+        auto redrawSwitcher = [&]() {
+            ui::drawHeader("Load app");
+            if (index < scroll) scroll = index;
+            if (index >= scroll + kVisible) scroll = index - kVisible + 1;
+
+            for (int row = 0; row < kVisible; ++row) {
+                const int i = scroll + row;
+                const int y = 24 + row * 14;
+                m5os::lcd().fillRect(4, y - 2, m5os::lcd().width() - 8, 14, TFT_BLACK);
+                if (i >= static_cast<int>(installed.size())) continue;
+                m5os::lcd().setCursor(8, y);
+                String line = installed[i].name;
+                if (installed[i].version.length()) line += " v" + installed[i].version;
+                if (i == index) {
+                    m5os::lcd().setTextColor(ui::theme().primary, ui::theme().secondary);
+                    m5os::lcd().printf("> %s", line.c_str());
+                } else {
+                    m5os::lcd().setTextColor(ui::theme().secondary, TFT_BLACK);
+                    m5os::lcd().printf("  %s", line.c_str());
+                }
+            }
+
+        m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
+        m5os::lcd().setCursor(4, 118);
+        m5os::lcd().print(kAppPickerFooter);
+            lastIndex = index;
+            lastScroll = scroll;
+        };
+
+        redrawSwitcher();
+        m5os::keyboardDrainDel();
+
+        bool rescan = false;
+        while (!rescan) {
+            if (index != lastIndex || scroll != lastScroll) redrawSwitcher();
+
+            m5os::update();
+            Buttons keys = ui::readButtonsExtended();
+            if (keys.help) {
+                ui::drawHelpOverlay();
+                continue;
+            }
+            if (keys.up) index = (index > 0) ? index - 1 : static_cast<int>(installed.size()) - 1;
+            if (keys.down) index = (index + 1) % static_cast<int>(installed.size());
+            if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
+                if (M5Cardputer.Keyboard.keysState().tab) {
+                    index = (index + 1) % static_cast<int>(installed.size());
+                }
+            }
+            if (keys.back || m5os::keyboardBackJustPressed()) return;
+            if (m5os::keyboardDelJustPressed()) {
+                const auto& pkg = installed[index];
+                if (confirmAndDeleteApp(launcher_, catalog_, pkg)) {
+                    rescan = true;
+                    break;
+                }
+                redrawSwitcher();
+                m5os::keyboardDrainDel();
+                continue;
+            }
+            if (keys.ok || m5os::keyboardEnterJustPressed()) {
+                const auto& pkg = installed[index];
+                const LoadConfirmChoice choice = promptLoadAppConfirm(
+                    pkg.name, pkg.description.length() ? pkg.description : "Field firmware");
+                if (choice == LoadConfirmChoice::Cancel) {
+                    redrawSwitcher();
+                    continue;
+                }
+                LaunchOptions opts;
+                opts.skipHash = choice == LoadConfirmChoice::FastLoad;
+                ui::showFlashProgress(0, "Load app", pkg.name + "\nStarting...");
+                m5os::update();
+                LaunchResult result = launcher_.launchBinFile(pkg.binFile, opts);
+                (void)result;
+                return;
+            }
+            delay(power::uiLoopDelayMs());
+        }
     }
 }
 
@@ -186,36 +213,132 @@ void LauncherMenu::showLoadCatalog() {
         showSdRequired("Load needs SD");
         return;
     }
-    std::vector<String> labels;
-    for (const auto& pkg : catalog_.available()) {
-        String line = pkg.name + " v" + pkg.version;
-        if (pkg.installed) line += " [SD]";
-        labels.push_back(line);
-    }
-    const int pick = ui::selectFromList(labels, "Load from catalog");
-    if (pick < 0) return;
-    const FirmwarePackage& pkg = catalog_.available()[pick];
-    if (pkg.installed) {
-        ui::showMessage("Load", pkg.name + "\nAlready on SD", TFT_YELLOW);
+    if (catalog_.available().empty()) {
+        ui::showMessage("Load from catalog", "No packages\nRefresh manifest", TFT_YELLOW);
         return;
     }
-    if (!wifiIsConnected()) {
-        ui::showMessage("Load", "WiFi required", TFT_RED);
-        return;
-    }
-    ui::showFlashProgress(0, "Loading", pkg.name);
-    m5os::update();
-    if (catalog_.downloadPackage(pkg)) {
-        const String path = catalog_.binPathForPackage(pkg);
-        String body = pkg.name;
-        if (path.length()) body += "\nSaved to\n" + path;
-        ui::showFlashProgress(100, "Loading", body);
-        ui::showMessage("Loaded", body, TFT_GREEN, 2200);
-    } else {
-        String body = catalog_.lastDownloadError().length() ? catalog_.lastDownloadError()
-                                                            : String("Load failed");
-        if (!vfs::isMounted()) body = "Insert SD to save";
-        ui::showMessage("Load failed", body, TFT_RED);
+
+    int index = 0;
+    int scroll = 0;
+    int lastIndex = -1;
+    int lastScroll = -1;
+    constexpr int kVisible = 6;
+
+    auto redrawCatalog = [&]() {
+        const auto& packages = catalog_.available();
+        ui::drawHeader("Load from catalog");
+        if (index < scroll) scroll = index;
+        if (index >= scroll + kVisible) scroll = index - kVisible + 1;
+
+        for (int row = 0; row < kVisible; ++row) {
+            const int i = scroll + row;
+            const int y = 24 + row * 14;
+            m5os::lcd().fillRect(4, y - 2, m5os::lcd().width() - 8, 14, TFT_BLACK);
+            if (i >= static_cast<int>(packages.size())) continue;
+            m5os::lcd().setCursor(8, y);
+            String line = packages[i].name + " v" + packages[i].version;
+            if (packages[i].installed) line += " [SD]";
+            if (i == index) {
+                m5os::lcd().setTextColor(ui::theme().primary, ui::theme().secondary);
+                m5os::lcd().printf("> %s", line.c_str());
+            } else {
+                m5os::lcd().setTextColor(ui::theme().secondary, TFT_BLACK);
+                m5os::lcd().printf("  %s", line.c_str());
+            }
+        }
+
+        m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
+        m5os::lcd().setCursor(4, 118);
+        m5os::lcd().print(kAppPickerFooter);
+        lastIndex = index;
+        lastScroll = scroll;
+    };
+
+    redrawCatalog();
+    m5os::keyboardDrainDel();
+
+    while (true) {
+        if (index != lastIndex || scroll != lastScroll) redrawCatalog();
+
+        m5os::update();
+        Buttons keys = ui::readButtonsExtended();
+        if (keys.help) {
+            ui::drawHelpOverlay();
+            continue;
+        }
+        if (keys.up) {
+            const int n = static_cast<int>(catalog_.available().size());
+            index = (index > 0) ? index - 1 : n - 1;
+        }
+        if (keys.down) {
+            index = (index + 1) % static_cast<int>(catalog_.available().size());
+        }
+        if (M5Cardputer.Keyboard.isChange() && M5Cardputer.Keyboard.isPressed()) {
+            if (M5Cardputer.Keyboard.keysState().tab) {
+                index = (index + 1) % static_cast<int>(catalog_.available().size());
+            }
+        }
+        if (keys.back || m5os::keyboardBackJustPressed()) return;
+
+        const FirmwarePackage& pkg = catalog_.available()[index];
+        if (m5os::keyboardDelJustPressed()) {
+            if (!pkg.installed) {
+                redrawCatalog();
+                m5os::keyboardDrainDel();
+                continue;
+            }
+            if (confirmAndDeleteApp(launcher_, catalog_, pkg)) {
+                if (catalog_.available().empty()) {
+                    ui::showMessage("Load from catalog", "No packages\nRefresh manifest", TFT_YELLOW);
+                    return;
+                }
+                index = min(index, static_cast<int>(catalog_.available().size()) - 1);
+                lastIndex = -1;
+            } else {
+                redrawCatalog();
+                m5os::keyboardDrainDel();
+            }
+            continue;
+        }
+
+        if (keys.ok || m5os::keyboardEnterJustPressed()) {
+            if (pkg.installed) {
+                const LoadConfirmChoice choice = promptLoadAppConfirm(
+                    pkg.name, pkg.description.length() ? pkg.description : "Field firmware");
+                if (choice == LoadConfirmChoice::Cancel) {
+                    redrawCatalog();
+                    continue;
+                }
+                LaunchOptions opts;
+                opts.skipHash = choice == LoadConfirmChoice::FastLoad;
+                ui::showFlashProgress(0, "Load app", pkg.name + "\nStarting...");
+                m5os::update();
+                LaunchResult result = launcher_.launchBinFile(pkg.binFile, opts);
+                (void)result;
+                return;
+            }
+            if (!wifiIsConnected()) {
+                ui::showMessage("Load", "WiFi required", TFT_RED);
+                redrawCatalog();
+                continue;
+            }
+            ui::showFlashProgress(0, "Loading", pkg.name);
+            m5os::update();
+            if (catalog_.downloadPackage(pkg)) {
+                const String path = catalog_.binPathForPackage(pkg);
+                String body = pkg.name;
+                if (path.length()) body += "\nSaved to\n" + path;
+                ui::showFlashProgress(100, "Loading", body);
+                ui::showMessage("Loaded", body, TFT_GREEN, 2200);
+            } else {
+                String body = catalog_.lastDownloadError().length() ? catalog_.lastDownloadError()
+                                                                    : String("Load failed");
+                if (!vfs::isMounted()) body = "Insert SD to save";
+                ui::showMessage("Load failed", body, TFT_RED);
+            }
+            return;
+        }
+        delay(power::uiLoopDelayMs());
     }
 }
 
@@ -276,18 +399,29 @@ void LauncherMenu::showFlashBurnerCatalog() {
     m5os::lcd().setCursor(4, 44);
     m5os::lcd().println(version.length() ? version : "latest");
     m5os::lcd().setCursor(4, 64);
-    m5os::lcd().print("Enter download + Load app");
-    m5os::lcd().setCursor(4, 78);
-    m5os::lcd().print("SPIFFS apps: save only");
+    if (pkg.installed) {
+        m5os::lcd().print("Enter download + Load app");
+        m5os::lcd().setCursor(4, 78);
+        m5os::lcd().print("Del delete SD copy");
+    } else {
+        m5os::lcd().print("Enter download + Load app");
+        m5os::lcd().setCursor(4, 78);
+        m5os::lcd().print("SPIFFS apps: save only");
+    }
     m5os::lcd().setCursor(4, 92);
     m5os::lcd().print("ESC/` cancel");
 
     m5os::keyboardDrainBack();
     m5os::keyboardDrainEnter();
+    m5os::keyboardDrainDel();
     while (true) {
         m5os::update();
         Buttons keys = ui::readButtonsExtended();
         if (keys.back || m5os::keyboardBackJustPressed()) return;
+        if (pkg.installed && m5os::keyboardDelJustPressed()) {
+            confirmAndDeleteApp(launcher_, catalog_, pkg);
+            return;
+        }
         if (keys.ok || m5os::keyboardEnterJustPressed()) {
             ui::showFlashProgress(0, "M5Burner load", pkg.name + "\nResolving...");
             m5os::update();
