@@ -215,7 +215,8 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
         return false;
     }
     if (firmwareSize > runSlot->size) {
-        result.message = "App too large for run slot";
+        result.message = formatAppTooLargeMessage(firmwareSize, runSlot->size);
+        log::info("launch_size_rejected", String(firmwareSize) + "/" + String(runSlot->size));
         return false;
     }
     if (esp_partition_erase_range(runSlot, 0, runSlot->size) != ESP_OK) {
@@ -285,8 +286,12 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
     const size_t otaLimit = maxOtaAppBytes();
     if (firmwareSize == 0 || firmwareSize > otaLimit) {
         firmware.close();
-        result.message = firmwareSize ? "App too large for OTA slot" : "Empty bin file";
-        log::info("launch_size_rejected", cacheKey);
+        if (firmwareSize == 0) {
+            result.message = "Empty bin file";
+        } else {
+            result.message = formatAppTooLargeMessage(firmwareSize, otaLimit);
+        }
+        log::info("launch_size_rejected", cacheKey + " " + String(firmwareSize) + "/" + String(otaLimit));
         surfaceLaunchFailure(label, result);
         return result;
     }
@@ -351,10 +356,11 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
         log::info("launch_cached_ok", cacheKey);
         ui::showMessage("Load app", label + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
 
+        paintLoadAppPhase(98, label, "Gateway", "Installing...");
         if (!flashEmbeddedGatewayIfNeeded()) {
             cancelLaunchSession();
             result.ok = false;
-            result.message = "Gateway missing\nAdd /system/m5os_session_gateway.bin";
+            result.message = "Gateway install failed\nUse flash_all.ps1 or SD /system/";
             log::info("launch_gateway_fail", "cached");
             surfaceLaunchFailure(label, result);
             return result;
@@ -396,10 +402,11 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
     log::info("launch_ok", cacheKey);
     ui::showMessage("Load app", label + "\nRebooting...", TFT_GREEN, 1200);
 
+    paintLoadAppPhase(98, label, "Gateway", "Installing...");
     if (!flashEmbeddedGatewayIfNeeded()) {
         cancelLaunchSession();
         result.ok = false;
-        result.message = "Gateway missing\nAdd /system/m5os_session_gateway.bin";
+        result.message = "Gateway install failed\nUse flash_all.ps1 or SD /system/";
         log::info("launch_gateway_fail", "copy");
         surfaceLaunchFailure(label, result);
         return result;

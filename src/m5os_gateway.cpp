@@ -4,6 +4,8 @@
 
 #include "m5os_flash.h"
 
+#include "m5os_gateway_embed.h"
+
 #include "m5os_gateway_shared.h"
 
 #include "m5os_vfs.h"
@@ -228,7 +230,23 @@ bool flashEmbeddedGatewayIfNeeded() {
 
 
 
-    log::info("gw_flash_missing", "copy gateway bin to /system/");
+    if (gateway_embed::kSize > 0 && gateway_embed::kData[0] == 0xE9) {
+
+        if (flashGatewayImage(gateway_embed::kData, gateway_embed::kSize)) {
+
+            log::info("gw_flash_embed_ok", String(gateway_embed::kSize));
+
+            return true;
+
+        }
+
+        log::info("gw_flash_embed_fail", String(gateway_embed::kSize));
+
+    }
+
+
+
+    log::info("gw_flash_missing", "embedded+sd unavailable");
 
     return false;
 

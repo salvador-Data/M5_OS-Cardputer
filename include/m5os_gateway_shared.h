@@ -18,9 +18,11 @@ constexpr char kStagingPath[] = "/home/default/.staging/run_app.bin";
 
 
 
-constexpr unsigned kMinGatewayUiMs = 1500;
+constexpr unsigned kMinGatewayUiMs = 2000;
 
-constexpr unsigned kAutoLaunchMs = 2500;
+constexpr unsigned kAutoLaunchMs = 6000;
+
+constexpr unsigned kEscHoldMs = 1000;
 
 /** Tell custom bootloader to honor otadata on the next SW reset (Load app / launch run slot). */
 inline void setStagedBootHandoff() { REG_WRITE(RTC_CNTL_STORE0_REG, kRtcBootStagedMagic); }

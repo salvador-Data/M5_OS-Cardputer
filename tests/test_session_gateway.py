@@ -33,15 +33,17 @@ def test_launcher_uses_gateway_session():
     assert "launchGatewaySession()" in text
     assert "runSlotOtaPartition()" in text
     assert "flashEmbeddedGatewayIfNeeded()" in text
+    assert "Installing..." in text
     assert "esp_partition_write(runSlot" in text
     assert "launchStagedAppSession()" not in text
 
 
 def test_gateway_firmware_ui():
     main = GATEWAY_MAIN.read_text(encoding="utf-8")
-    assert "ESC = M5 OS" in main
+    assert "ESC/` = M5 OS" in main
     assert "Enter = launch app" in main
     assert "kMinGatewayUiMs" in main
+    assert "kAutoLaunchMs = 6000" in (ROOT / "include" / "m5os_gateway_shared.h").read_text(encoding="utf-8")
     assert "sess_exit" in main or '"sess_exit"' in main
 
 
@@ -54,6 +56,26 @@ def test_gateway_helpers_in_tree():
     ):
         assert sym in GATEWAY_H.read_text(encoding="utf-8")
         assert sym in GATEWAY_CPP.read_text(encoding="utf-8")
+
+
+def test_embedded_gateway_fallback():
+    cpp = GATEWAY_CPP.read_text(encoding="utf-8")
+    assert "m5os_gateway_embed.h" in cpp
+    assert "gateway_embed::kData" in cpp
+    assert "gw_flash_embed_ok" in cpp
+    prebuild = (ROOT / "scripts" / "prebuild_gateway_embed.py").read_text(encoding="utf-8")
+    assert "m5os_gateway_embed.cpp" in prebuild
+    assert "m5os-session-gateway" in prebuild
+
+
+def test_upload_all_target():
+    extra = (ROOT / "scripts" / "upload_all_extra.py").read_text(encoding="utf-8")
+    assert "upload-all" in extra
+    assert "upload-factory" in extra
+    assert "0x3D0000" in extra
+    ini = PLATFORMIO.read_text(encoding="utf-8")
+    assert "upload_all_extra.py" in ini
+    assert "prebuild_gateway_embed.py" in ini
 
 
 def test_staged_launch_delegates_to_gateway():

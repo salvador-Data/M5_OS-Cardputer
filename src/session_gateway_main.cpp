@@ -116,7 +116,7 @@ bool keyboardEnterJustPressed() {
 
 
 
-void drawFrame(const char* statusLine) {
+void drawFrame(const char* statusLine, int countdownSec = -1) {
 
     auto& d = M5Cardputer.Display;
 
@@ -132,7 +132,7 @@ void drawFrame(const char* statusLine) {
 
     d.setCursor(4, 24);
 
-    d.println("ESC = M5 OS");
+    d.println("ESC/` = M5 OS");
 
     d.setCursor(4, 40);
 
@@ -143,6 +143,14 @@ void drawFrame(const char* statusLine) {
     d.setCursor(4, 56);
 
     d.println(statusLine);
+
+    if (countdownSec >= 0) {
+
+        d.setCursor(4, 72);
+
+        d.printf("Auto-launch in %ds", countdownSec);
+
+    }
 
 }
 
@@ -268,7 +276,11 @@ void setup() {
 
     const unsigned long autoLaunchAt = uiStart + m5os::gateway::kAutoLaunchMs;
 
-    drawFrame("Waiting...");
+    drawFrame("Press ESC or wait");
+
+    unsigned long escHoldStart = 0;
+
+    int lastCountdown = -1;
 
 
 
@@ -292,6 +304,28 @@ void setup() {
 
         const unsigned long now = millis();
 
+        if (keyboardBackHeld()) {
+
+            if (escHoldStart == 0) escHoldStart = now;
+
+            if (now - escHoldStart >= m5os::gateway::kEscHoldMs) {
+
+                drawFrame("Returning to M5 OS...");
+
+                M5Cardputer.update();
+
+                exitToHome();
+
+            }
+
+        } else {
+
+            escHoldStart = 0;
+
+        }
+
+
+
         if (now >= uiStart + m5os::gateway::kMinGatewayUiMs &&
 
             (keyboardEnterJustPressed() || now >= autoLaunchAt)) {
@@ -306,9 +340,15 @@ void setup() {
 
 
 
-        if ((now / 400) % 2 == 0) {
+        const int countdownSec =
 
-            drawFrame(now < autoLaunchAt ? "ESC or Enter" : "Launching soon...");
+            now < autoLaunchAt ? static_cast<int>((autoLaunchAt - now + 999) / 1000) : 0;
+
+        if (countdownSec != lastCountdown) {
+
+            lastCountdown = countdownSec;
+
+            drawFrame(now < autoLaunchAt ? "ESC/` or hold 1s" : "Launching soon...", countdownSec);
 
         }
 

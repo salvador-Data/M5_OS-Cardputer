@@ -5,6 +5,7 @@
 #include "m5os_config.h"
 #include "M5OSDevice.h"
 #include "m5os_gc.h"
+#include "m5os_gateway.h"
 #include "m5os_settings.h"
 #include "m5os_vfs.h"
 #include "serial_log.h"
@@ -445,7 +446,38 @@ void LauncherMenu::showWifiSetup() {
 
 void LauncherMenu::showBurnerBridge() {
     burner::showHelpScreen();
-    ui::showMessage("Recovery", burner::recoveryInstructions());
+    String body = burner::recoveryInstructions();
+    if (gatewayPartitionReady()) {
+        body += "\n\nSession gateway: ready";
+    } else {
+        body += "\n\nSession gateway: missing";
+        body += "\nEnter = install now";
+    }
+    ui::drawHeader("M5Burner / recovery");
+    m5os::lcd().setTextColor(TFT_WHITE, TFT_BLACK);
+    m5os::lcd().setCursor(4, 28);
+    m5os::lcd().println(body);
+    m5os::lcd().setTextColor(TFT_DARKGREY, TFT_BLACK);
+    m5os::lcd().setCursor(4, 118);
+    m5os::lcd().print("ESC/` back  Enter install");
+    m5os::keyboardDrainBack();
+    m5os::keyboardDrainEnter();
+    while (true) {
+        m5os::update();
+        Buttons keys = ui::readButtonsExtended();
+        if (keys.back || m5os::keyboardBackJustPressed()) return;
+        if ((keys.ok || m5os::keyboardEnterJustPressed()) && !gatewayPartitionReady()) {
+            ui::showMessage("Gateway", "Installing to app1...", TFT_CYAN, 800);
+            if (flashEmbeddedGatewayIfNeeded()) {
+                ui::showMessage("Gateway", "Session gateway ready", TFT_GREEN, 1600);
+            } else {
+                ui::showMessage("Gateway", "Install failed\nUse flash_all.ps1", TFT_RED, 2400);
+            }
+            return;
+        }
+        if (keys.ok || m5os::keyboardEnterJustPressed()) return;
+        delay(power::uiLoopDelayMs());
+    }
 }
 
 void LauncherMenu::showStorageCleanup() {

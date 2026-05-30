@@ -320,14 +320,18 @@ Shipped catalog entries link Hacker Planet apps:
 
 Partition layout (`partitions/m5os_cardputer_8MB.csv`): **app0** = M5 OS (~3.75 MiB), **app1** = **session gateway** (~448 KiB), **app2** = foreign app run slot (~3.75 MiB).
 
-**Load app** copies the `.bin` to **app2**, flashes the gateway into **app1** (from SD `/system/m5os_session_gateway.bin` or USB `scripts/flash_session_gateway.ps1`), then reboots into the gateway screen.
+**Load app** copies the `.bin` to **app2**, then **auto-installs the session gateway into app1** from firmware embedded at build time (SD `/system/m5os_session_gateway.bin` overrides when present), then reboots into the gateway screen.
 
-**Troubleshooting — “App too large for OTA slot”:** Apps must fit the **app2** run slot (0x3C0000 bytes), not the small **app1** gateway partition. If you see this error on builds before May 2026, reflash M5 OS from this repo — older firmware mistakenly used the gateway partition size as the limit.
+M5 OS also installs the gateway on boot when app1 is empty. Menu → **M5Burner / recovery** → Enter installs it manually if still missing.
+
+For USB dev flash, use **`scripts/flash_all.ps1`** (app0 + app1) or PlatformIO **`upload-all`** / **`upload-factory`** — plain **`upload`** only writes M5 OS to app0.
+
+**Troubleshooting — “App too large for OTA slot”:** Apps must fit the **app2** run slot (**3.75 MB** / 0x3C0000 bytes), not the small **app1** gateway partition (~448 KiB). Load app now shows **App X.XX MB / slot Y.YY MB — too large** before copying. Use a smaller `.bin`, M5Burner USB full flash, or apps without SPIFFS composite.
 
 | Gateway screen | Result |
 |----------------|--------|
 | **ESC** or **`** | Return to M5 OS → **Save files before exit?** (`y` / `n`) |
-| **Enter** (after ~1.5 s) | Boots the app in **app2** (auto-launch ~2.5 s if you wait) |
+| **Enter** (after ~2 s) | Boots the app in **app2** (auto-launch ~6 s if you wait) |
 
 Custom bootloader policy: **cold power-on** and **side reset** always boot **M5 OS (app0)** even when otadata pointed at app2. **Software reset** from Load app follows otadata (gateway first, then app after Enter).
 
@@ -343,7 +347,7 @@ Custom bootloader policy: **cold power-on** and **side reset** always boot **M5 
 
 To exit a running foreign app without power-cycling: press the **Cardputer reset button** (side) or **power off/on**, then answer the save prompt when M5 OS boots. SD saves: `/home/default/apps/<slug>/saves/`.
 
-Build gateway firmware:
+Build gateway firmware (also runs automatically before M5 OS build):
 
 ```powershell
 cd C:\Users\Owner\Projects\M5_OS-Cardputer
@@ -353,7 +357,19 @@ cd C:\Users\Owner\Projects\M5_OS-Cardputer
 .\scripts\build_session_gateway.ps1
 ```
 
-Copy `data\m5os_session_gateway.bin` to the microSD folder `system\`, or flash app1 over USB:
+**Recommended USB flash (M5 OS + gateway on app1):**
+
+```powershell
+.\scripts\flash_all.ps1 -Port COM13
+```
+
+Or PlatformIO after build:
+
+```powershell
+pio run -e m5stack-cardputer -t upload-all --upload-port COM13
+```
+
+Optional: copy `data\m5os_session_gateway.bin` to microSD `system\` to override the embedded gateway, or flash app1 only:
 
 ```powershell
 .\scripts\flash_session_gateway.ps1 -Port COM13

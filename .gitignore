@@ -5,3 +5,7 @@ __pycache__/
 *.log
 .DS_Store
 Thumbs.db
+include/m5os_gateway_embed.h
+src/m5os_gateway_embed.cpp
+data/m5os_session_gateway.bin
+.pio/gateway_embed.stamp

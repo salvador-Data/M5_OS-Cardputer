@@ -23,6 +23,12 @@ namespace m5os {
 
 size_t maxOtaAppBytes();
 
+/** Human-readable size for Load app errors (e.g. "3.75 MB"). */
+String formatFlashSizeMb(size_t bytes);
+
+/** Pre-check message when an app bin exceeds the run slot. */
+String formatAppTooLargeMessage(size_t appBytes, size_t slotBytes);
+
 
 
 /** Persist label of the M5 OS launcher partition (NVS) for recovery boot. */

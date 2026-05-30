@@ -42,6 +42,8 @@
 
 #include "m5os_flash.h"
 
+#include "m5os_gateway.h"
+
 #include "stamp_glow.h"
 
 
@@ -91,6 +93,15 @@ void setup() {
 
 
     m5os::saveHomeAppPartition();
+
+    if (!m5os::gatewayPartitionReady()) {
+        m5os::ui::showMessage("M5 OS", "Installing session gateway...", TFT_CYAN, 600);
+        if (m5os::flashEmbeddedGatewayIfNeeded()) {
+            m5os::log::info("gw_boot_install_ok", "");
+        } else {
+            m5os::log::info("gw_boot_install_fail", "use menu or flash_all.ps1");
+        }
+    }
 
     m5os::beginWatchdog();
 

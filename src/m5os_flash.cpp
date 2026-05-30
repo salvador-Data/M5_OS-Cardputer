@@ -344,6 +344,22 @@ size_t maxOtaAppBytes() {
     return kMaxAppBinBytes;
 }
 
+String formatFlashSizeMb(size_t bytes) {
+    char buf[24];
+    const float mb = static_cast<float>(bytes) / (1024.0f * 1024.0f);
+    snprintf(buf, sizeof(buf), "%.2f MB", mb);
+    return String(buf);
+}
+
+String formatAppTooLargeMessage(size_t appBytes, size_t slotBytes) {
+    String msg = "App " + formatFlashSizeMb(appBytes);
+    msg += " / slot " + formatFlashSizeMb(slotBytes);
+    msg += " — too large\nUse smaller bin or";
+    msg += "\nM5Burner USB full flash";
+    msg += "\n(no SPIFFS composite)";
+    return msg;
+}
+
 
 
 bool markPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t targetState) {
