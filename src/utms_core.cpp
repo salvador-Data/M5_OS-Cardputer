@@ -402,7 +402,7 @@ bool deleteQuarantined(const String& quarantineName, String& errOut) {
     JsonArray entries = doc["entries"].as<JsonArray>();
     int found = -1;
     for (size_t i = 0; i < entries.size(); ++i) {
-        if ((entries[i]["file"] | "") == safe) {
+        if (String(entries[i]["file"] | "") == safe) {
             found = static_cast<int>(i);
             break;
         }

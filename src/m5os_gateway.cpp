@@ -3,6 +3,8 @@
 #include "m5os_config.h"
 #include "m5os_flash.h"
 
+// stagingOtaPartition() lives in m5os_flash.cpp only.
+
 #include "m5os_gateway_embed.h"
 
 #include "m5os_gateway_shared.h"
@@ -125,13 +127,9 @@ const esp_partition_t* runSlotOtaPartition() {
     if (app2) return app2;
     const esp_partition_t* app1 =
         esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
-    if (app1 && app1->size >= kMinRunSlotPartitionBytes) return app1;
+    if (app1 && app1->size >= 0x200000) return app1;
     return nullptr;
 }
-
-
-
-const esp_partition_t* stagingOtaPartition() { return runSlotOtaPartition(); }
 
 
 
