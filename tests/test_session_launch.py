@@ -35,6 +35,7 @@ def test_session_marks_staged_valid_before_reboot():
     flash = FLASH_CPP.read_text(encoding="utf-8")
     fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("bool nvsSetFlag")]
     assert "markPartitionOtaState(target, ESP_OTA_IMG_VALID)" in fn
+    assert "setRtcBootStagedHandoff()" in fn
     assert "ESP_OTA_IMG_PENDING_VERIFY" not in fn
     assert "esp_restart()" in fn
     assert "launchGatewaySession" not in fn

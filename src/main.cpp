@@ -116,6 +116,10 @@ void setup() {
 
         else if (detail == "already_running") msg = "Already on run slot\nRe-copy from SD";
 
+        else if (detail == "otadata") msg = "otadata update failed\nReflash M5 OS";
+
+        else if (detail == "image_verify") msg = "App image invalid\nWrong chip or corrupt bin";
+
         else if (detail.length()) msg = detail;
 
         m5os::ui::showMessage("Load app failed", msg, TFT_RED, 2500);

@@ -138,6 +138,12 @@ bool consumeLaunchHandoffFailure();
 
 String consumeLaunchFailDetail();
 
+/** Same as consumeLaunchFailDetail but does not clear (for immediate UI after failed launch). */
+String peekLaunchFailDetail();
+
+/** Map launch fail tag to user-facing message. */
+String formatLaunchFailMessage(const String& tag);
+
 
 
 /** Save home, point otadata at staged app, single SW restart into app. */
@@ -147,6 +153,9 @@ bool launchStagedAppSession();
 
 
 const esp_partition_t* stagingOtaPartition();
+
+/** ESP image header + esp_image_verify on a partition (after SD copy). */
+bool verifyPartitionAppImage(const esp_partition_t* part);
 
 /** Mark a non-running OTA slot state in otadata (e.g. gateway or run slot). */
 bool markPartitionOtaState(const esp_partition_t* part, esp_ota_img_states_t targetState);

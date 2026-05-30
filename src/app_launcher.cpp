@@ -79,6 +79,11 @@ void surfaceLaunchFailure(const String& appLabel, LaunchResult& result) {
     ui::showMessage("Load app failed", result.message, TFT_RED);
 }
 
+void surfaceLaunchRebootFailure(const String& appLabel, LaunchResult& result) {
+    result.message = formatLaunchFailMessage(peekLaunchFailDetail());
+    surfaceLaunchFailure(appLabel, result);
+}
+
 void paintLaunchProgress(size_t done, size_t total, LaunchProgressCtx* ctx) {
     if (!ctx || total == 0) return;
     const int pct = static_cast<int>(min(100ULL, (done * 100ULL) / total));
@@ -252,7 +257,16 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
         log::info("launch_magic_fail", String(magic, HEX));
         return false;
     }
-    markPartitionOtaState(staged, ESP_OTA_IMG_VALID);
+    if (!verifyPartitionAppImage(staged)) {
+        result.message = "App image invalid\nWrong chip or corrupt bin";
+        log::info("launch_image_fail", staged->label);
+        return false;
+    }
+    if (!markPartitionOtaState(staged, ESP_OTA_IMG_VALID)) {
+        result.message = "otadata update failed\nReflash M5 OS";
+        log::info("launch_otadata_fail");
+        return false;
+    }
     return true;
 }
 
@@ -368,9 +382,8 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
         cancelLaunchSession();
         result.ok = false;
-        result.message = "Reboot failed\nCheck serial log";
         log::info("launch_reboot_fail", "cached");
-        surfaceLaunchFailure(label, result);
+        surfaceLaunchRebootFailure(label, result);
         return result;
     }
 
@@ -413,9 +426,8 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     cancelLaunchSession();
     result.ok = false;
-    result.message = "Copy OK, reboot failed\nCheck serial log";
     log::info("launch_reboot_fail", "copy");
-    surfaceLaunchFailure(label, result);
+    surfaceLaunchRebootFailure(label, result);
     return result;
 }
 

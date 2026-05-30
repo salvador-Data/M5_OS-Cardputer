@@ -35,7 +35,7 @@ def test_single_reboot_launch_sets_boot_partition():
     assert "esp_ota_get_state_partition" in flash
     fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("}  // namespace", flash.index("bool rebootIntoStagedApp"))]
     assert "restoreBootToHome()" not in fn
-    assert "esp_ota_set_boot_partition(target)" in fn
+    assert "setBootPartitionForLaunch(target)" in fn
     assert "m5os_launch_reboot" in fn
     launcher = (ROOT / "src" / "app_launcher.cpp").read_text(encoding="utf-8")
     assert "launchStagedAppSession()" in launcher

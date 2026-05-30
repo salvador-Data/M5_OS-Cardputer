@@ -20,6 +20,8 @@
 
 #include <esp_flash_partitions.h>
 
+#include <esp_image_format.h>
+
 #include <esp_ota_ops.h>
 
 #include <esp_system.h>
@@ -27,6 +29,8 @@
 #include <nvs.h>
 
 #include <soc/rtc_cntl_reg.h>
+
+#include <cstring>
 
 
 
@@ -93,6 +97,64 @@ bool partitionIsLaunchable(const esp_partition_t* part) {
     }
 
     return partitionHasAppMagic(part);
+
+}
+
+
+
+bool writeOtadataSelectEntry(const esp_partition_t* otadata, int sectorIndex,
+
+                             const esp_ota_select_entry_t& entry) {
+
+    if (!otadata || sectorIndex < 0 || sectorIndex > 1) return false;
+
+    constexpr size_t kSectorSize = 4096;
+
+    if (esp_partition_erase_range(otadata, sectorIndex * kSectorSize, kSectorSize) != ESP_OK) {
+
+        return false;
+
+    }
+
+    return esp_partition_write(otadata, sectorIndex * kSectorSize, &entry, sizeof(entry)) == ESP_OK;
+
+}
+
+
+
+uint32_t nextOtadataSeqForIndex(int stagedIndex, uint8_t otaAppCount, uint32_t activeSeq) {
+
+    const uint32_t indexSeq = (static_cast<uint32_t>(stagedIndex) % otaAppCount) + 1;
+
+    if (activeSeq == 0 || activeSeq == UINT32_MAX) return indexSeq;
+
+    uint32_t generation = 0;
+
+    while (activeSeq >= indexSeq + generation * otaAppCount) {
+
+        ++generation;
+
+    }
+
+    return indexSeq + generation * otaAppCount;
+
+}
+
+
+
+bool setBootPartitionForLaunch(const esp_partition_t* target) {
+
+    if (!target) return false;
+
+    if (esp_ota_get_boot_partition() == target) return true;
+
+    const esp_err_t err = esp_ota_set_boot_partition(target);
+
+    if (err == ESP_OK) return true;
+
+    log::info("m5os_set_boot_fail", String(static_cast<int>(err)));
+
+    return esp_ota_get_boot_partition() == target;
 
 }
 
@@ -220,6 +282,18 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
 
 
+    if (!verifyPartitionAppImage(target)) {
+
+        cancelLaunchSession();
+
+        noteLaunchFail("image_verify");
+
+        return false;
+
+    }
+
+
+
     if (!saveHomeAppPartition()) log::info("m5os_launch_warn", "home_save_failed");
 
 
@@ -230,7 +304,15 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     // immediately revert to M5 OS before the user can use the loaded firmware.
 
-    markPartitionOtaState(target, ESP_OTA_IMG_VALID);
+    if (!markPartitionOtaState(target, ESP_OTA_IMG_VALID)) {
+
+        cancelLaunchSession();
+
+        noteLaunchFail("otadata");
+
+        return false;
+
+    }
 
 
 
@@ -238,7 +320,7 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     if (boot != target) {
 
-        if (esp_ota_set_boot_partition(target) != ESP_OK) {
+        if (!setBootPartitionForLaunch(target)) {
 
             cancelLaunchSession();
 
@@ -247,6 +329,8 @@ bool rebootIntoStagedApp(const char* phaseTag) {
             return false;
 
         }
+
+        markPartitionOtaState(target, ESP_OTA_IMG_VALID);
 
     }
 
@@ -259,6 +343,8 @@ bool rebootIntoStagedApp(const char* phaseTag) {
     log::info("m5os_launch_reboot", String(phaseTag) + ":" + target->label);
 
     for (int i = 0; i < 20; ++i) delay(10);
+
+    setRtcBootStagedHandoff();
 
     esp_restart();
 
@@ -322,6 +408,19 @@ bool nvsGetFlag(const char* key) {
 
 const esp_partition_t* stagingOtaPartition() {
     return esp_ota_get_next_update_partition(nullptr);
+}
+
+bool verifyPartitionAppImage(const esp_partition_t* part) {
+    if (!part) return false;
+    uint8_t magic = 0;
+    if (esp_partition_read(part, 0, &magic, 1) != ESP_OK || magic != 0xE9) return false;
+    esp_app_desc_t desc{};
+    if (esp_ota_get_partition_description(part, &desc) == ESP_OK) return true;
+    esp_partition_pos_t pos{};
+    pos.offset = part->address;
+    pos.size = part->size;
+    esp_image_metadata_t metadata{};
+    return esp_image_verify(ESP_IMAGE_VERIFY, &pos, &metadata) == ESP_OK;
 }
 
 size_t maxOtaAppBytes() {
@@ -390,6 +489,8 @@ bool markPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t t
 
     const int stagedIndex = static_cast<int>(staged->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_0);
 
+    if (stagedIndex < 0 || stagedIndex >= static_cast<int>(otaAppCount)) return false;
+
     bool updated = false;
 
 
@@ -415,6 +516,38 @@ bool markPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t t
         }
 
         updated = true;
+
+    }
+
+
+
+    if (!updated) {
+
+        const int active = bootloader_common_get_active_otadata(entries);
+
+        const int nextSector = (active == -1) ? 0 : ((~active) & 1);
+
+        const uint32_t activeSeq = (active == -1) ? 0 : entries[active].ota_seq;
+
+        const uint32_t nextSeq = nextOtadataSeqForIndex(stagedIndex, otaAppCount, activeSeq);
+
+        esp_ota_select_entry_t selected{};
+
+        std::memset(&selected, 0xFF, sizeof(selected));
+
+        selected.ota_seq = nextSeq;
+
+        selected.ota_state = targetState;
+
+        selected.crc = bootloader_common_ota_select_crc(&selected);
+
+        updated = writeOtadataSelectEntry(otadata, nextSector, selected);
+
+        if (updated) {
+
+            log::info("m5os_stage_ota_boot", String(staged->label) + ":" + String(nextSeq));
+
+        }
 
     }
 
@@ -757,6 +890,30 @@ String consumeLaunchFailDetail() {
     gLaunchFailDetail = "";
 
     return detail;
+
+}
+
+
+
+String peekLaunchFailDetail() { return gLaunchFailDetail; }
+
+
+
+String formatLaunchFailMessage(const String& tag) {
+
+    if (tag == "no_target") return "No valid app in run slot\nRe-copy from SD";
+
+    if (tag == "set_boot") return "Boot switch failed\nImage may be invalid";
+
+    if (tag == "already_running") return "Already on run slot\nRe-copy from SD";
+
+    if (tag == "otadata") return "otadata update failed\nReflash M5 OS";
+
+    if (tag == "image_verify") return "App image invalid\nWrong chip or corrupt bin";
+
+    if (tag.length()) return tag;
+
+    return "Reboot failed\nCheck serial log";
 
 }
 
