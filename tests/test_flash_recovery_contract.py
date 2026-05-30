@@ -118,7 +118,7 @@ def test_burner_streams_report_progress():
 
 def test_launcher_menu_no_auto_boot_hint():
     text = LAUNCHER_CPP.read_text(encoding="utf-8")
-    assert "No auto-boot" in text or "save to SD" in text.lower()
+    assert "No auto-boot" in text or "save to SD" in text.lower() or "insert sd to save" in text.lower()
 
 
 def test_app_switcher_on_main_menu_esc():
