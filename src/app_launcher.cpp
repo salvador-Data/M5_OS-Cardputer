@@ -20,6 +20,8 @@
 
 #include "m5os_security.h"
 
+#include "m5os_settings.h"
+
 #include "m5os_watchdog.h"
 
 #include "serial_log.h"
@@ -125,19 +127,24 @@ bool rebootIntoGatewaySession(const String& appLabel, LaunchResult& result) {
         paintLoadAppPhase(0, appLabel, "Session shell", "Installing gateway...");
         if (!ensureGatewayInstalled(gwProgress)) {
             result.ok = false;
+            const String gwDetail = lastGatewayFlashDetail();
             if (SD.exists("/system/m5os_session_gateway.bin")) {
                 result.message =
                     "Gateway stale on SD\nDelete /system/\nm5os_session_gateway.bin\nThen flash_all.ps1";
+            } else if (gwDetail.length()) {
+                result.message = gwDetail + "\nRun flash_all.ps1 on COM13";
             } else {
                 result.message = "Gateway install failed\nRun flash_all.ps1 on COM13";
             }
-            log::info("launch_gateway_install_fail", appLabel);
+            log::info("launch_gateway_install_fail", gwDetail.length() ? gwDetail : appLabel);
             surfaceLaunchFailure(appLabel, result);
             return false;
         }
         if (!gatewayPartitionReady()) {
             result.ok = false;
-            result.message = "Gateway verify failed\nRun flash_all.ps1 on COM13";
+            const String gwDetail = lastGatewayFlashDetail();
+            result.message = gwDetail.length() ? gwDetail + "\nRun flash_all.ps1 on COM13"
+                                             : "Gateway verify failed\nRun flash_all.ps1 on COM13";
             log::info("launch_gateway_verify_fail", appLabel);
             surfaceLaunchFailure(appLabel, result);
             return false;
@@ -273,6 +280,28 @@ void storeLaunchCache(const String& binFile, const String& sha256, size_t firmwa
 
 }
 
+void clearLaunchCacheForKey(const String& cacheKey) {
+    Preferences prefs;
+    if (!prefs.begin(kLaunchNs, false)) return;
+    if (prefs.getString(kLastBinKey, "") == cacheKey) {
+        prefs.remove(kLastBinKey);
+        prefs.remove(kLastShaKey);
+        prefs.remove(kLastSizeKey);
+        prefs.remove(kLastMtimeKey);
+        log::info("launch_cache_cleared", cacheKey);
+    }
+    prefs.end();
+}
+
+bool clearRunSlotIfCached(const String& cacheKey) {
+    Preferences prefs;
+    if (!prefs.begin(kLaunchNs, true)) return false;
+    const bool matches = prefs.getString(kLastBinKey, "") == cacheKey;
+    prefs.end();
+    if (!matches) return false;
+    return invalidateRunSlot();
+}
+
 
 
 bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, LaunchResult& result) {
@@ -299,7 +328,10 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
 
     OtaSlotWriter writer;
     if (!otaSlotWriterBegin(writer, staged, firmwareSize)) {
-        result.message = "OTA begin failed\nReflash M5 OS";
+        const String err = formatEspOtaErr(writer.lastErr);
+        result.message = "OTA begin failed (run slot)";
+        if (err.length()) result.message += "\n" + err;
+        result.message += "\nReflash M5 OS";
         log::info("launch_ota_begin_fail", staged->label);
         return false;
     }
@@ -312,8 +344,11 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
         if (n == 0) break;
         if (!otaSlotWriterAppend(writer, buffer, n)) {
             otaSlotWriterAbort(writer);
-            result.message = "Write failed — M5 OS intact";
-            log::info("launch_write_fail");
+            const String err = formatEspOtaErr(writer.lastErr);
+            result.message = "OTA write failed (run slot)";
+            if (err.length()) result.message += "\n" + err;
+            result.message += "\nM5 OS intact";
+            log::info("launch_write_fail", err.length() ? err : "unknown");
             return false;
         }
         written += n;
@@ -717,7 +752,33 @@ LaunchResult AppLauncher::launchByPackageName(const String& packageName) {
 
 }
 
+AppDeleteResult AppLauncher::deleteInstalledApp(const FirmwarePackage& pkg) {
+    AppDeleteResult result;
+    const String slug = pkg.slug.length() ? pkg.slug : vfs::slugFromName(pkg.name);
+    const String cacheKey = pkg.binFile.length() ? security::sanitizeBinFilename(pkg.binFile) : slug + ".bin";
 
+    if (!settings::ensureSdMounted()) {
+        result.message = "Insert SD to delete";
+        return result;
+    }
+
+    result.clearedRunSlot = clearRunSlotIfCached(cacheKey);
+    clearLaunchCacheForKey(cacheKey);
+
+    String err;
+    if (!vfs::removeApp(slug, err)) {
+        result.message = err.length() ? err : String("Delete failed");
+        log::info("app_delete_fail", slug + " " + result.message);
+        return result;
+    }
+
+    catalog_.scanInstalled();
+    result.ok = true;
+    result.message = slug;
+    if (result.clearedRunSlot) result.message += "\nRun slot cleared";
+    log::info("app_delete_ok", slug);
+    return result;
+}
 
 }  // namespace m5os
 

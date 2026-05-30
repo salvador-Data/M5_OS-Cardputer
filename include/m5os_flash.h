@@ -28,6 +28,9 @@ String formatFlashSizeMb(size_t bytes);
 /** Pre-check message when an app bin exceeds the run slot. */
 String formatAppTooLargeMessage(size_t appBytes, size_t slotBytes);
 
+/** Short esp_err label for OTA write failures (e.g. "err 0x102"). */
+String formatEspOtaErr(esp_err_t err);
+
 
 
 /** Persist label of the M5 OS launcher partition (NVS) for recovery boot. */
@@ -175,6 +178,9 @@ bool runSlotReadyForLaunch(size_t expectedSize);
 /** Mark a non-running OTA slot state in otadata (e.g. gateway or run slot). */
 bool markPartitionOtaState(const esp_partition_t* part, esp_ota_img_states_t targetState);
 
+/** Mark app2 run slot INVALID — does not touch app0/app1. */
+bool invalidateRunSlot();
+
 /** Incremental SD/network → inactive OTA slot writer (esp_ota_begin/write/end). */
 struct OtaSlotWriter {
     esp_ota_handle_t handle = 0;
@@ -182,6 +188,7 @@ struct OtaSlotWriter {
     size_t expected = 0;
     size_t written = 0;
     bool active = false;
+    esp_err_t lastErr = ESP_OK;
 };
 
 bool otaSlotWriterBegin(OtaSlotWriter& writer, const esp_partition_t* part, size_t imageSize);

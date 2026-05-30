@@ -213,11 +213,14 @@ bool probeRemoteSize(const String& url, size_t& totalSize, int* httpCodeOut = nu
     return totalSize > 0;
 }
 
+enum class StreamWriteFail : uint8_t { None, Ota, Sd };
+
 struct RangeFlashContext {
     size_t expected = 0;
     size_t written = 0;
     File* sdOut = nullptr;
     OtaSlotWriter otaWriter{};
+    StreamWriteFail lastWriteFail = StreamWriteFail::None;
 };
 
 bool prepareRunSlotForStream(RangeFlashContext& ctx) {
@@ -240,14 +243,22 @@ bool prepareRunSlotForStream(RangeFlashContext& ctx) {
 }
 
 bool writeFlashChunk(RangeFlashContext& ctx, const uint8_t* data, size_t len) {
-    if (!prepareRunSlotForStream(ctx)) return false;
+    if (!prepareRunSlotForStream(ctx)) {
+        ctx.lastWriteFail = StreamWriteFail::Ota;
+        return false;
+    }
     if (!otaSlotWriterAppend(ctx.otaWriter, data, len)) {
-        log::info("burner_write_fail");
+        ctx.lastWriteFail = StreamWriteFail::Ota;
+        log::info("burner_write_fail", formatEspOtaErr(ctx.otaWriter.lastErr));
         otaSlotWriterAbort(ctx.otaWriter);
         return false;
     }
     if (ctx.sdOut && (*ctx.sdOut)) {
-        if (ctx.sdOut->write(data, len) != len) return false;
+        if (ctx.sdOut->write(data, len) != len) {
+            ctx.lastWriteFail = StreamWriteFail::Sd;
+            log::info("burner_sd_write_fail", String(ctx.written));
+            return false;
+        }
     }
     ctx.written += len;
     return true;
@@ -257,7 +268,22 @@ struct RangeStreamResult {
     bool ok = false;
     int httpCode = 0;
     size_t written = 0;
+    bool sdWriteFail = false;
 };
+
+String formatStreamWriteFail(const RangeFlashContext& ctx) {
+    if (ctx.lastWriteFail == StreamWriteFail::Sd) {
+        return "SD write failed during load\nFAT32 + free space";
+    }
+    if (ctx.lastWriteFail == StreamWriteFail::Ota) {
+        String msg = "OTA write failed (run slot)";
+        const String err = formatEspOtaErr(ctx.otaWriter.lastErr);
+        if (err.length()) msg += "\n" + err;
+        msg += "\nM5 OS intact";
+        return msg;
+    }
+    return "";
+}
 
 void reportStreamProgress(size_t written, size_t total, const char* label,
                           const char* detailLine, size_t* lastPainted) {
@@ -338,6 +364,8 @@ RangeStreamResult streamRangeChunk(const String& url, uint32_t offset, size_t im
         if (out.write(buffer, static_cast<size_t>(read)) != static_cast<size_t>(read)) {
             http.end();
             result.written = written;
+            result.sdWriteFail = true;
+            log::info("burner_sd_write_fail", String(written));
             return result;
         }
         written += static_cast<size_t>(read);
@@ -462,6 +490,7 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
     }
     String otaErr;
     if (!otaSlotWriterFinish(ctx.otaWriter, &otaErr)) {
+        ctx.lastWriteFail = StreamWriteFail::Ota;
         log::info("burner_ota_end_fail", otaErr);
         return false;
     }
@@ -475,24 +504,30 @@ bool streamRangeToOtaOnce(const String& url, uint32_t offset, size_t imageSize, 
 
 bool streamRangeToOta(const String& url, uint32_t offset, size_t imageSize, File* sdOut,
                       int* httpCodeOut = nullptr, const char* progressLabel = "Loading app",
-                      const char* detailLine = nullptr) {
+                      const char* detailLine = nullptr, String* writeFailOut = nullptr) {
     RangeFlashContext ctx;
     ctx.sdOut = sdOut;
+    String lastFail;
     for (uint8_t attempt = 0; attempt < kHttpMaxAttempts; ++attempt) {
         if (streamRangeToOtaOnce(url, offset, imageSize, sdOut, httpCodeOut, progressLabel,
                                  detailLine, ctx)) {
             return true;
         }
+        const String detail = formatStreamWriteFail(ctx);
+        if (detail.length()) lastFail = detail;
         otaSlotWriterAbort(ctx.otaWriter);
         ctx.written = 0;
+        ctx.lastWriteFail = StreamWriteFail::None;
         if (sdOut && (*sdOut)) {
             if (!sdOut->seek(0)) {
                 log::info("burner_sd_seek_fail", "0");
+                if (writeFailOut) *writeFailOut = "SD seek failed during retry";
                 return false;
             }
         }
         delay(400 * (attempt + 1));
     }
+    if (writeFailOut && lastFail.length()) *writeFailOut = lastFail;
     return false;
 }
 
@@ -723,9 +758,9 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
 
     const uint32_t offset = plan.noBootloader ? 0 : plan.appOffset;
     int flashHttpCode = 0;
-    const bool ok =
-        streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr,
-                         &flashHttpCode, "Loading app", flashDetail.c_str());
+    String writeFail;
+    const bool ok = streamRangeToOta(plan.downloadUrl, offset, plan.appSize, sdOut ? &sdOut : nullptr,
+                                    &flashHttpCode, "Loading app", flashDetail.c_str(), &writeFail);
     if (sdOut) sdOut.close();
 
     if (!ok) {
@@ -734,6 +769,8 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
             result.message = "WiFi lost during load";
         } else if (flashHttpCode > 0) {
             result.message = formatHttpStageError("Load HTTP", flashHttpCode);
+        } else if (writeFail.length()) {
+            result.message = writeFail;
         } else {
             result.message = "Load failed — launcher intact";
         }
@@ -801,6 +838,8 @@ BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const Strin
             result.message = "WiFi lost during load";
         } else if (streamed.httpCode > 0) {
             result.message = formatHttpStageError("Load HTTP", streamed.httpCode);
+        } else if (streamed.sdWriteFail) {
+            result.message = "SD write failed during download\nFAT32 + free space";
         } else if (streamed.written > 0) {
             result.message = "Load incomplete " + String(streamed.written) + "/" +
                              String(plan.appSize);

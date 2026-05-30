@@ -23,6 +23,11 @@ constexpr char kGatewaySdPath[] = "/system/m5os_session_gateway.bin";
 
 bool gDeferredGatewayInstallPending = false;
 bool gDeferredGatewayInstallDone = false;
+String gLastGatewayFlashDetail;
+
+void noteGatewayFlashDetail(const char* detail) {
+    gLastGatewayFlashDetail = detail ? detail : "";
+}
 
 void reportProgress(GatewayFlashProgressFn progress, int percent, const char* phase) {
     if (progress) progress(percent, phase);
@@ -57,21 +62,31 @@ bool gatewayImageMatchesEmbed(const esp_partition_t* gw) {
 
 bool flashGatewayFromFile(File& f, size_t len, GatewayFlashProgressFn progress) {
     const esp_partition_t* gw = gatewayOtaPartition();
-    if (!gw || len == 0 || len > gw->size || len > kGatewayMaxBytes) return false;
+    if (!gw || len == 0 || len > gw->size || len > kGatewayMaxBytes) {
+        noteGatewayFlashDetail("Gateway layout/size invalid");
+        return false;
+    }
     if (gateway_embed::kSize > 0 && len != gateway_embed::kSize) {
+        noteGatewayFlashDetail("Gateway SD bin wrong size");
         log::info("gw_sd_size_mismatch", String(len) + "/" + String(gateway_embed::kSize));
         return false;
     }
 
     reportProgress(progress, 0, "Erase app1");
-    if (esp_partition_erase_range(gw, 0, gw->size) != ESP_OK) return false;
+    if (esp_partition_erase_range(gw, 0, gw->size) != ESP_OK) {
+        noteGatewayFlashDetail("Gateway erase (app1) failed");
+        return false;
+    }
 
     uint8_t buffer[kFlashChunk];
     size_t written = 0;
     while (written < len) {
         const size_t n = f.read(buffer, min(sizeof(buffer), len - written));
         if (n == 0) break;
-        if (esp_partition_write(gw, written, buffer, n) != ESP_OK) return false;
+        if (esp_partition_write(gw, written, buffer, n) != ESP_OK) {
+            noteGatewayFlashDetail("Gateway flash write (app1)");
+            return false;
+        }
         written += n;
         feedWatchdog();
         if (progress && (written == n || written % kFlashChunk == 0 || written == len)) {
@@ -79,16 +94,22 @@ bool flashGatewayFromFile(File& f, size_t len, GatewayFlashProgressFn progress) 
             reportProgress(progress, pct, "Write gateway");
         }
     }
-    if (written != len) return false;
+    if (written != len) {
+        noteGatewayFlashDetail("Gateway SD read incomplete");
+        return false;
+    }
     reportProgress(progress, 100, "Verify gateway");
     if (!partitionHasAppMagic(gw) || !gatewayImageMatchesEmbed(gw)) {
+        noteGatewayFlashDetail("Gateway verify failed (app1)");
         log::info("gw_sd_embed_mismatch", String(len));
         return false;
     }
     if (!markPartitionOtaState(gw, ESP_OTA_IMG_VALID)) {
+        noteGatewayFlashDetail("Gateway otadata (app1) failed");
         log::info("gw_sd_otadata_fail", String(len));
         return false;
     }
+    gLastGatewayFlashDetail = "";
     return true;
 }
 
@@ -112,15 +133,24 @@ bool gatewayPartitionReady() {
 
 bool flashGatewayImage(const uint8_t* data, size_t len, GatewayFlashProgressFn progress) {
     const esp_partition_t* gw = gatewayOtaPartition();
-    if (!gw || !data || len == 0 || len > gw->size || len > kGatewayMaxBytes) return false;
+    if (!gw || !data || len == 0 || len > gw->size || len > kGatewayMaxBytes) {
+        noteGatewayFlashDetail("Gateway embed size invalid");
+        return false;
+    }
 
     reportProgress(progress, 0, "Erase app1");
-    if (esp_partition_erase_range(gw, 0, gw->size) != ESP_OK) return false;
+    if (esp_partition_erase_range(gw, 0, gw->size) != ESP_OK) {
+        noteGatewayFlashDetail("Gateway erase (app1) failed");
+        return false;
+    }
 
     size_t written = 0;
     while (written < len) {
         const size_t chunk = min(kFlashChunk, len - written);
-        if (esp_partition_write(gw, written, data + written, chunk) != ESP_OK) return false;
+        if (esp_partition_write(gw, written, data + written, chunk) != ESP_OK) {
+            noteGatewayFlashDetail("Gateway embed write (app1)");
+            return false;
+        }
         written += chunk;
         feedWatchdog();
         if (progress && (written == chunk || written % kFlashChunk == 0 || written == len)) {
@@ -130,19 +160,23 @@ bool flashGatewayImage(const uint8_t* data, size_t len, GatewayFlashProgressFn p
     }
 
     if (!partitionHasAppMagic(gw) || !gatewayImageMatchesEmbed(gw)) {
+        noteGatewayFlashDetail("Gateway verify failed (app1)");
         log::info("gw_flash_magic_fail", String(len));
         return false;
     }
     if (!markPartitionOtaState(gw, ESP_OTA_IMG_VALID)) {
+        noteGatewayFlashDetail("Gateway otadata (app1) failed");
         log::info("gw_flash_otadata_fail", String(len));
         return false;
     }
+    gLastGatewayFlashDetail = "";
     reportProgress(progress, 100, "Gateway ready");
     log::info("gw_flash_ok", String(len));
     return true;
 }
 
 bool flashEmbeddedGatewayIfNeeded(GatewayFlashProgressFn progress) {
+    gLastGatewayFlashDetail = "";
     if (gatewayPartitionReady()) {
         log::info("gw_ready_skip", "magic");
         reportProgress(progress, 100, "Gateway ready");
@@ -177,9 +211,12 @@ bool flashEmbeddedGatewayIfNeeded(GatewayFlashProgressFn progress) {
         log::info("gw_flash_embed_fail", String(gateway_embed::kSize));
     }
 
+    noteGatewayFlashDetail("Gateway image missing");
     log::info("gw_flash_missing", "embedded+sd unavailable");
     return false;
 }
+
+String lastGatewayFlashDetail() { return gLastGatewayFlashDetail; }
 
 bool ensureGatewayInstalled(GatewayFlashProgressFn progress) {
     return flashEmbeddedGatewayIfNeeded(progress);

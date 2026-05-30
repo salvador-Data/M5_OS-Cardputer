@@ -17,6 +17,12 @@ struct LaunchOptions {
     bool skipHash = false;
 };
 
+struct AppDeleteResult {
+    bool ok = false;
+    bool clearedRunSlot = false;
+    String message;
+};
+
 class AppLauncher {
 public:
     explicit AppLauncher(FirmwareCatalog& catalog);
@@ -26,6 +32,8 @@ public:
     LaunchResult launchByPackageName(const String& packageName);
     /** Stream LauncherHub/M5Burner firmware into OTA slot (Boris installFirmwareFromManifest subset). */
     LaunchResult flashBurnerPackage(const FirmwarePackage& pkg, const String& version = "");
+    /** Delete SD app compartment + data; clears launch NVS / run slot when it matches. */
+    AppDeleteResult deleteInstalledApp(const FirmwarePackage& pkg);
 
 private:
     FirmwareCatalog& catalog_;

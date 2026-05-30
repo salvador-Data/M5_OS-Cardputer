@@ -412,13 +412,21 @@ String formatAppTooLargeMessage(size_t appBytes, size_t slotBytes) {
     return msg;
 }
 
-
+String formatEspOtaErr(esp_err_t err) {
+    if (err == ESP_OK) return "";
+    return "err 0x" + String(static_cast<unsigned>(err), HEX);
+}
 
 bool markPartitionOtaState(const esp_partition_t* staged, esp_ota_img_states_t targetState) {
     return otadata::markPartitionOtaState(staged, targetState);
 }
 
-
+bool invalidateRunSlot() {
+    const esp_partition_t* slot = runSlotOtaPartition();
+    if (!slot) return false;
+    log::info("run_slot_invalidate", slot->label);
+    return markPartitionOtaState(slot, ESP_OTA_IMG_INVALID);
+}
 
 bool saveHomeAppPartition() {
 
@@ -864,6 +872,7 @@ bool otaSlotWriterBegin(OtaSlotWriter& writer, const esp_partition_t* part, size
 
     if (err != ESP_OK) {
 
+        writer.lastErr = err;
         log::info("m5os_ota_begin_fail", String(static_cast<int>(err)));
 
         return false;
@@ -894,6 +903,7 @@ bool otaSlotWriterAppend(OtaSlotWriter& writer, const uint8_t* data, size_t len)
 
     if (err != ESP_OK) {
 
+        writer.lastErr = err;
         log::info("m5os_ota_write_fail", String(static_cast<int>(err)));
 
         otaSlotWriterAbort(writer);
@@ -938,6 +948,7 @@ bool otaSlotWriterFinish(OtaSlotWriter& writer, String* errOut) {
 
     if (err != ESP_OK) {
 
+        writer.lastErr = err;
         log::info("m5os_ota_end_fail", String(static_cast<int>(err)));
 
         if (errOut) {

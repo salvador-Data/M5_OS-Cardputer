@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arduino.h>
 #include <cstddef>
 #include <cstdint>
 
@@ -39,5 +40,8 @@ bool gatewayExitToHome();
 
 /** Gateway Enter path: boot run slot (app2) via otadata + restart. */
 bool gatewayLaunchRunSlot();
+
+/** Last gateway flash failure detail (SD read, app1 write, verify, otadata). */
+String lastGatewayFlashDetail();
 
 }  // namespace m5os
