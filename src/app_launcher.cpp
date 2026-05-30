@@ -301,7 +301,7 @@ bool copySdToOta(File& firmware, size_t firmwareSize, const String& appLabel, La
     }
 
     paintLoadAppDebugPhase(100, appLabel, "Copy OK");
-    log::info("launch_copy_ok", staged->label + " chip" + chipDetail);
+    log::info("launch_copy_ok", String(staged->label) + " chip" + chipDetail);
     return true;
 }
 
