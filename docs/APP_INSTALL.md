@@ -77,7 +77,7 @@ Insert **FAT32** microSD (contacts away from screen). Boot should show **VFS rea
 1. Menu → **WiFi setup** → connect
 2. **Refresh manifest** (loads Hacker Planet manifest + merges LauncherHub `category=cardputer`)
 3. Either:
-   - **Load from M5Burner catalog** → pick firmware → saves to SD (SPIFFS/composite apps **do not auto-reboot** — M5 OS stays active)
+   - **Load from M5Burner catalog** → pick firmware → **Enter** downloads to SD, stages app2 run slot, then **Load app** reboots (SPIFFS/composite: save only, no auto-run)
    - **Load from catalog** → save `.bin` to SD only
 4. **Load app (ESC/`)** to run from SD without Wi-Fi
 

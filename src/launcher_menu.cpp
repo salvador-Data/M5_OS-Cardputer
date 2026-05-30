@@ -276,9 +276,9 @@ void LauncherMenu::showFlashBurnerCatalog() {
     m5os::lcd().setCursor(4, 44);
     m5os::lcd().println(version.length() ? version : "latest");
     m5os::lcd().setCursor(4, 64);
-    m5os::lcd().print("Enter save to SD");
+    m5os::lcd().print("Enter download + Load app");
     m5os::lcd().setCursor(4, 78);
-    m5os::lcd().print("No auto-boot — Load app runs");
+    m5os::lcd().print("SPIFFS apps: save only");
     m5os::lcd().setCursor(4, 92);
     m5os::lcd().print("ESC/` cancel");
 

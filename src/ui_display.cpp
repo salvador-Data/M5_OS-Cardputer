@@ -1048,7 +1048,7 @@ int selectFromList(const std::vector<String>& items, const char* title, int star
         }
         if (keys.up) index = (index > 0) ? index - 1 : static_cast<int>(items.size()) - 1;
         if (keys.down) index = (index + 1) % static_cast<int>(items.size());
-        if (keys.ok) return index;
+        if (keys.ok || m5os::keyboardEnterJustPressed()) return index;
         if (keys.back || m5os::keyboardBackJustPressed()) return -1;
         delay(power::uiLoopDelayMs());
     }

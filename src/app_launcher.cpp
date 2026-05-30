@@ -592,19 +592,20 @@ LaunchResult AppLauncher::flashBurnerPackage(const FirmwarePackage& pkgIn, const
     result.message = flash.message;
 
     if (flash.ok) {
-
-        catalog_.markNeedsFlashSpiffs(pkg.fid, pkg.name,
-
-                                      plan.requiresFlashAssets || !plan.dataSlices.empty());
-
+        const bool needsSpiffs = plan.requiresFlashAssets || !plan.dataSlices.empty();
+        catalog_.markNeedsFlashSpiffs(pkg.fid, pkg.name, needsSpiffs);
         catalog_.scanInstalled();
-
-        if (SD.exists(sdPath.c_str())) {
-
-            result.message = "Saved to\n" + sdPath + "\nLoad app to run";
-
+        if (needsSpiffs) {
+            if (SD.exists(sdPath.c_str())) {
+                result.message = "Saved to\n" + sdPath + "\nUSB full flash to run";
+            }
+        } else if (SD.exists(sdPath.c_str())) {
+            LaunchOptions opts;
+            opts.skipHash = true;
+            LaunchResult launch = launchBinFile(safeBin, opts);
+            result.ok = launch.ok;
+            result.message = launch.message.length() ? launch.message : flash.message;
         }
-
     }
 
     return result;
