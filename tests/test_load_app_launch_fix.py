@@ -24,8 +24,9 @@ def test_reboot_sets_rtc_handoff_and_skip_validate_fallback():
     assert "setBootPartitionForLaunch(target)" in fn
     assert "verifyPartitionAppImage(target)" in fn
     assert 'noteLaunchFail("otadata")' in fn
-    assert "verifyPartitionAppImage(target)" in fn
-    assert 'noteLaunchFail("otadata")' in fn
+    assert "setLaunchPending(true)" in fn
+    assert "clearLaunchPending()" not in fn
+    assert "feedWatchdog()" in fn
 
 
 def test_verify_partition_app_image_exported():
@@ -48,3 +49,12 @@ def test_main_handoff_failure_tags_include_otadata_and_image():
     main = MAIN_CPP.read_text(encoding="utf-8")
     assert '"otadata"' in main
     assert '"image_verify"' in main
+    assert '"snapback"' in main
+
+
+def test_launch_snapback_handler():
+    flash = FLASH_CPP.read_text(encoding="utf-8")
+    fn = flash[flash.index("bool tryHandleLaunchSnapBack") : flash.index("void logBootPartitionContext")]
+    assert "m5os_launch_snapback" in fn
+    assert 'noteLaunchFail("snapback")' in fn
+    assert "cancelLaunchSession()" in fn

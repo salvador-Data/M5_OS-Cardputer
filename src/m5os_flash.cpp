@@ -4,6 +4,8 @@
 
 #include "M5OSDevice.h"
 
+#include "m5os_watchdog.h"
+
 #include "serial_log.h"
 
 #include "stamp_glow.h"
@@ -336,13 +338,16 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
 
 
-    clearLaunchPending();
+    setLaunchPending(true);
 
 
 
     log::info("m5os_launch_reboot", String(phaseTag) + ":" + target->label);
 
-    for (int i = 0; i < 20; ++i) delay(10);
+    for (int i = 0; i < 20; ++i) {
+        feedWatchdog();
+        delay(10);
+    }
 
     setRtcBootStagedHandoff();
 
@@ -707,11 +712,11 @@ const esp_partition_t* resolveLaunchBootPartition() {
 
 void applyColdBootHomeRestore() {
 
-    clearRtcBootStagedHandoff();
-
     const esp_reset_reason_t reason = esp_reset_reason();
 
     if (!boot_policy::shouldHardwareResetRestoreHome(reason)) return;
+
+    clearRtcBootStagedHandoff();
 
 
 
@@ -823,19 +828,57 @@ bool launchSessionActive() { return gLaunchRestartPending || isAppSessionActive(
 
 bool tryLaunchPendingHandoff() {
 
-    if (!isLaunchPending()) return false;
+    /* Single-reboot launch (9135c9e+): phase-2 handoff removed to avoid double esp_restart. */
 
-    if (esp_reset_reason() != ESP_RST_SW) {
+    if (isLaunchPending()) log::info("m5os_handoff_legacy", "noop");
 
-        log::info("m5os_handoff_skip", String(static_cast<int>(esp_reset_reason())));
+    return false;
 
-        return false;
+}
+
+
+
+bool tryHandleLaunchSnapBack() {
+
+    if (!isLaunchPending() || !isRunningHomePartition()) return false;
+
+    const esp_reset_reason_t reason = esp_reset_reason();
+
+    if (reason == ESP_RST_SW) {
+
+        const esp_partition_t* boot = esp_ota_get_boot_partition();
+
+        log::info("m5os_launch_snapback", boot && boot->label[0] ? boot->label : "unknown");
+
+        noteLaunchFail("snapback");
+
+        cancelLaunchSession();
+
+        return true;
 
     }
 
-    log::info("m5os_handoff_legacy", "phase2");
+    clearLaunchPending();
 
-    return rebootIntoStagedApp("handoff");
+    return false;
+
+}
+
+
+
+void logBootPartitionContext() {
+
+    const esp_partition_t* running = esp_ota_get_running_partition();
+
+    const esp_partition_t* boot = esp_ota_get_boot_partition();
+
+    const String runLabel = running && running->label[0] ? running->label : String("?");
+
+    const String bootLabel = boot && boot->label[0] ? boot->label : String("?");
+
+    log::info("m5os_boot_part", runLabel + "/" + bootLabel);
+
+    log::info("m5os_reset_reason", String(static_cast<int>(esp_reset_reason())));
 
 }
 
@@ -910,6 +953,8 @@ String formatLaunchFailMessage(const String& tag) {
     if (tag == "otadata") return "otadata update failed\nReflash M5 OS";
 
     if (tag == "image_verify") return "App image invalid\nWrong chip or corrupt bin";
+
+    if (tag == "snapback") return "App did not start\nNeed ESP32-S3 bin\nCheck serial log";
 
     if (tag.length()) return tag;
 

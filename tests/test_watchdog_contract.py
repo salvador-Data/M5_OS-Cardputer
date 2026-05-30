@@ -43,8 +43,10 @@ def test_launch_pending_skips_shutdown_restore_on_load_app():
     assert "esp_restart()" in reboot
     assert "restoreBootToHome()" not in reboot
     assert "setBootPartitionForLaunch(target)" in reboot
-    handoff = flash[flash.index("bool tryLaunchPendingHandoff") : flash.index("void tryEarlyRecoveryBoot")]
-    assert "rebootIntoStagedApp" in handoff
+    assert "setLaunchPending(true)" in reboot
+    handoff = flash[flash.index("bool tryLaunchPendingHandoff") : flash.index("bool tryHandleLaunchSnapBack")]
+    assert "rebootIntoStagedApp" not in handoff
+    assert "return false" in handoff
 
 
 def test_crash_reset_restores_home():

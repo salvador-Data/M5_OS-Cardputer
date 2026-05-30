@@ -34,10 +34,13 @@ def should_prompt_session_return(
     session_exit_pending: bool,
     running_home: bool,
     reset_reason: int,
+    launch_pending_after_attempt: bool = False,
 ) -> bool:
     if not running_home:
         return False
     if reset_reason == ESP_RST_POWERON:
+        return False
+    if launch_pending_after_attempt and is_session_sw_reset_exit(reset_reason):
         return False
     if session_exit_pending:
         return True
@@ -106,6 +109,14 @@ def test_sw_reset_with_active_session_no_prompt_without_exit_flag():
     assert not should_prompt_session_return(True, False, True, ESP_RST_SW)
 
 
+def test_launch_pending_sw_snapback_skips_session_prompt():
+    assert not should_prompt_session_return(True, False, True, ESP_RST_SW, True)
+
+
+def test_launch_pending_wdt_still_prompts_after_app_crash():
+    assert should_prompt_session_return(True, False, True, ESP_RST_TASK_WDT, True)
+
+
 def test_sw_reset_with_session_exit_pending_prompts():
     assert should_prompt_session_return(True, True, True, ESP_RST_SW)
 
@@ -150,6 +161,7 @@ def test_power_on_clears_session_ext_keeps_for_prompt():
     fn = flash[flash.index("void applyColdBootHomeRestore") : flash.index("void applyCrashResetHomeRestore")]
     assert "shouldHardwareResetRestoreHome" in fn
     assert "shouldPowerOnRestoreHome" in fn
+    assert fn.index("shouldHardwareResetRestoreHome") < fn.index("clearRtcBootStagedHandoff")
     assert 'log::info("m5os_hw_reset_home", "ext")' in fn
 
 

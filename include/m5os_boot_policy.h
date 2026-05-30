@@ -34,9 +34,12 @@ inline bool isSessionExtResetExit(esp_reset_reason_t reason) {
  * Does not run while the loaded app partition is executing.
  */
 inline bool shouldPromptSessionReturn(bool appSessionActive, bool sessionExitPending,
-                                      bool runningHome, esp_reset_reason_t resetReason) {
+                                      bool runningHome, esp_reset_reason_t resetReason,
+                                      bool launchPendingAfterAttempt = false) {
     if (!runningHome) return false;
     if (resetReason == ESP_RST_POWERON) return false;
+    /* Load app set launch_pend then esp_restart; SW reset still on home = run slot never ran. */
+    if (launchPendingAfterAttempt && isSessionSwResetExit(resetReason)) return false;
     if (sessionExitPending) return true;
     if (!appSessionActive) return false;
     /* SW reset without sess_exit is foreign-app esp_restart; bootloader stays in run slot. */

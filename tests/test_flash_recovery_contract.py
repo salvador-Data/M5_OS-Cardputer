@@ -51,9 +51,11 @@ def test_launch_fail_detail_wired_in_main():
 def test_recovery_boot_wired_in_main():
     text = MAIN_CPP.read_text(encoding="utf-8")
     assert "tryEarlyRecoveryBoot()" in text
+    assert "logBootPartitionContext()" in text
     assert "applyColdBootHomeRestore()" in text
     assert "applyCrashResetHomeRestore()" in text
-    assert "tryLaunchPendingHandoff()" in text
+    assert "tryHandleLaunchSnapBack()" in text
+    assert "tryLaunchPendingHandoff()" not in text
     assert "saveHomeAppPartition()" in text
     assert "gatewayPartitionReady()" not in text
     assert "beginWatchdog()" in text
@@ -80,6 +82,8 @@ def test_recovery_helpers_declared():
         "launchStagedAppSession",
         "markPartitionOtaState",
         "tryLaunchPendingHandoff",
+        "tryHandleLaunchSnapBack",
+        "logBootPartitionContext",
         "beginLaunchSession",
         "resolveLaunchBootPartition",
         "stagingOtaPartition",

@@ -64,15 +64,13 @@ void setup() {
 
     m5os::tryEarlyRecoveryBoot();
 
+    m5os::logBootPartitionContext();
+
     m5os::applyColdBootHomeRestore();
 
     m5os::applyCrashResetHomeRestore();
 
-    if (!m5os::tryLaunchPendingHandoff()) {
-
-        m5os::clearLaunchPending();
-
-    }
+    m5os::tryHandleLaunchSnapBack();
 
 
 
@@ -119,6 +117,8 @@ void setup() {
         else if (detail == "otadata") msg = "otadata update failed\nReflash M5 OS";
 
         else if (detail == "image_verify") msg = "App image invalid\nWrong chip or corrupt bin";
+
+        else if (detail == "snapback") msg = "App did not start\nNeed ESP32-S3 bin";
 
         else if (detail.length()) msg = detail;
 

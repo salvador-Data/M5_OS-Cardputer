@@ -99,7 +99,8 @@ bool prepareLaunchSd(const String& sdBinPath, const String& cacheKey, const Firm
 
 bool isSessionReturnBoot() {
     return boot_policy::shouldPromptSessionReturn(isAppSessionActive(), isSessionExitPending(),
-                                                  isRunningHomePartition(), esp_reset_reason());
+                                                  isRunningHomePartition(), esp_reset_reason(),
+                                                  isLaunchPending());
 }
 
 bool promptSaveSessionAndRestoreHome() {

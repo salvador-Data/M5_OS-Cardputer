@@ -122,9 +122,21 @@ const esp_partition_t* resolveLaunchBootPartition();
 
 
 
-/** Phase-2: after SW reset with launch pending, point otadata at staged app and restart. */
+/** Phase-2: deprecated — single-reboot launch; kept for ABI/tests. */
 
 bool tryLaunchPendingHandoff();
+
+
+
+/** After Load app, M5 OS still on home via SW reset (run slot did not stay loaded). */
+
+bool tryHandleLaunchSnapBack();
+
+
+
+/** Serial markers: running/boot otadata partition labels + reset reason. */
+
+void logBootPartitionContext();
 
 
 

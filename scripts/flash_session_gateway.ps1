@@ -12,5 +12,5 @@ $esptool = Join-Path $env:USERPROFILE ".platformio\packages\tool-esptoolpy\espto
 if (-not (Test-Path $esptool)) {
     & $pio pkg install -g -p espressif32 tool-esptoolpy
 }
-python $esptool --chip esp32s3 --port $Port write_flash 0x3D0000 $bin
-Write-Host "Gateway written to app1 @ 0x3D0000 on $Port"
+python $esptool --chip esp32s3 --port $Port write_flash 0x400000 $bin
+Write-Host "Gateway written to app1 @ 0x400000 on $Port"
