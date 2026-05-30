@@ -8,6 +8,7 @@ PROJECT_DIR = Path(env.subst("$PROJECT_DIR"))
 GATEWAY_ENV = "m5os-session-gateway"
 GATEWAY_BIN = PROJECT_DIR / ".pio" / "build" / GATEWAY_ENV / "firmware.bin"
 APP1_OFFSET = "0x400000"
+APP1_SIZE = "0x70000"
 
 
 def _gateway_bin():
@@ -35,11 +36,24 @@ def _upload_gateway(source, target, env):
         "esp32s3",
         "--port",
         port,
+        "erase_region",
+        APP1_OFFSET,
+        APP1_SIZE,
+    ]
+    print("M5 OS upload-all: erasing app1 @ %s (%s)" % (APP1_OFFSET, APP1_SIZE))
+    subprocess.check_call(cmd)
+    cmd = [
+        esptool,
+        str(pkg),
+        "--chip",
+        "esp32s3",
+        "--port",
+        port,
         "write_flash",
         APP1_OFFSET,
         str(gw),
     ]
-    print("M5 OS upload-all: writing gateway to app1 @ %s" % APP1_OFFSET)
+    print("M5 OS upload-all: writing gateway to app1 @ %s (%u bytes)" % (APP1_OFFSET, gw.stat().st_size))
     subprocess.check_call(cmd)
 
 

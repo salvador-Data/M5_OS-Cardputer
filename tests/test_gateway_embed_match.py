@@ -22,3 +22,13 @@ def test_flash_embed_image_checks_otadata_mark() -> None:
     fn = text[text.index("bool flashGatewayImage") : text.index("bool flashEmbeddedGatewayIfNeeded")]
     assert "gw_flash_otadata_fail" in fn
     assert "markPartitionOtaState(gw, ESP_OTA_IMG_VALID)" in fn
+
+
+def test_flash_sd_path_rejects_stale_embed() -> None:
+    text = GATEWAY_CPP.read_text(encoding="utf-8")
+    sd_fn = text[text.index("bool flashGatewayFromFile") : text.index("}  // namespace", text.index("bool flashGatewayFromFile"))]
+    assert "gw_sd_size_mismatch" in sd_fn
+    assert "gatewayImageMatchesEmbed(gw)" in sd_fn
+    embed_fn = text[text.index("bool flashEmbeddedGatewayIfNeeded") : text.index("bool ensureGatewayInstalled")]
+    assert "gw_sd_skip_stale" in embed_fn
+    assert "gatewayPartitionReady()" in embed_fn

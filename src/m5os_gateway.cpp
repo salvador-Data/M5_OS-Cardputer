@@ -58,6 +58,10 @@ bool gatewayImageMatchesEmbed(const esp_partition_t* gw) {
 bool flashGatewayFromFile(File& f, size_t len, GatewayFlashProgressFn progress) {
     const esp_partition_t* gw = gatewayOtaPartition();
     if (!gw || len == 0 || len > gw->size || len > kGatewayMaxBytes) return false;
+    if (gateway_embed::kSize > 0 && len != gateway_embed::kSize) {
+        log::info("gw_sd_size_mismatch", String(len) + "/" + String(gateway_embed::kSize));
+        return false;
+    }
 
     reportProgress(progress, 0, "Erase app1");
     if (esp_partition_erase_range(gw, 0, gw->size) != ESP_OK) return false;
@@ -77,7 +81,15 @@ bool flashGatewayFromFile(File& f, size_t len, GatewayFlashProgressFn progress) 
     }
     if (written != len) return false;
     reportProgress(progress, 100, "Verify gateway");
-    return partitionHasAppMagic(gw) && markPartitionOtaState(gw, ESP_OTA_IMG_VALID);
+    if (!partitionHasAppMagic(gw) || !gatewayImageMatchesEmbed(gw)) {
+        log::info("gw_sd_embed_mismatch", String(len));
+        return false;
+    }
+    if (!markPartitionOtaState(gw, ESP_OTA_IMG_VALID)) {
+        log::info("gw_sd_otadata_fail", String(len));
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -141,17 +153,24 @@ bool flashEmbeddedGatewayIfNeeded(GatewayFlashProgressFn progress) {
         File f = SD.open(kGatewaySdPath);
         if (f) {
             const size_t len = f.size();
-            const bool ok = flashGatewayFromFile(f, len, progress);
-            f.close();
-            if (ok) {
-                log::info("gw_flash_sd_ok", kGatewaySdPath);
-                return true;
+            if (gateway_embed::kSize > 0 && len != gateway_embed::kSize) {
+                log::info("gw_sd_skip_stale", String(len) + "/" + String(gateway_embed::kSize));
+            } else {
+                const bool ok = flashGatewayFromFile(f, len, progress);
+                if (ok && gatewayPartitionReady()) {
+                    log::info("gw_flash_sd_ok", kGatewaySdPath);
+                    f.close();
+                    return true;
+                }
+                log::info("gw_flash_sd_reject", kGatewaySdPath);
             }
+            f.close();
         }
     }
 
     if (gateway_embed::kSize > 0 && gateway_embed::kData[0] == 0xE9) {
-        if (flashGatewayImage(gateway_embed::kData, gateway_embed::kSize, progress)) {
+        if (flashGatewayImage(gateway_embed::kData, gateway_embed::kSize, progress) &&
+            gatewayPartitionReady()) {
             log::info("gw_flash_embed_ok", String(gateway_embed::kSize));
             return true;
         }
@@ -209,6 +228,10 @@ bool launchGatewaySession() {
     saveHomeAppPartition();
     nvsSetFlag(gateway::kGatewayActiveKey, true);
     markPartitionOtaState(run, ESP_OTA_IMG_VALID);
+    if (!markPartitionOtaState(gw, ESP_OTA_IMG_VALID)) {
+        log::info("gw_launch_fail", "gw_otadata");
+        return false;
+    }
 
     if (esp_ota_set_boot_partition(gw) != ESP_OK) {
         log::info("gw_launch_fail", "set_boot");

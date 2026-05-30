@@ -125,8 +125,20 @@ bool rebootIntoGatewaySession(const String& appLabel, LaunchResult& result) {
         paintLoadAppPhase(0, appLabel, "Session shell", "Installing gateway...");
         if (!ensureGatewayInstalled(gwProgress)) {
             result.ok = false;
-            result.message = "Gateway install failed\nRun flash_all.ps1";
+            if (SD.exists("/system/m5os_session_gateway.bin")) {
+                result.message =
+                    "Gateway stale on SD\nDelete /system/\nm5os_session_gateway.bin\nThen flash_all.ps1";
+            } else {
+                result.message = "Gateway install failed\nRun flash_all.ps1 on COM13";
+            }
             log::info("launch_gateway_install_fail", appLabel);
+            surfaceLaunchFailure(appLabel, result);
+            return false;
+        }
+        if (!gatewayPartitionReady()) {
+            result.ok = false;
+            result.message = "Gateway verify failed\nRun flash_all.ps1 on COM13";
+            log::info("launch_gateway_verify_fail", appLabel);
             surfaceLaunchFailure(appLabel, result);
             return false;
         }
@@ -135,7 +147,7 @@ bool rebootIntoGatewaySession(const String& appLabel, LaunchResult& result) {
 
     if (launchGatewaySession()) return true;
     result.ok = false;
-    result.message = "Gateway launch failed\nReflash M5 OS + gateway";
+    result.message = "Gateway boot failed\nRun flash_all.ps1 on COM13";
     log::info("launch_gateway_fail", appLabel);
     surfaceLaunchFailure(appLabel, result);
     return false;
