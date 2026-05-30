@@ -38,8 +38,8 @@ def test_single_reboot_launch_sets_boot_partition():
     assert "setBootPartitionForLaunch(target)" in fn
     assert "m5os_launch_reboot" in fn
     launcher = (ROOT / "src" / "app_launcher.cpp").read_text(encoding="utf-8")
-    assert "launchStagedAppSession()" in launcher
-    assert "launchGatewaySession()" not in launcher
+    assert "launchGatewaySession()" in launcher
+    assert "launchStagedAppSession()" not in launcher
 
 
 def test_launch_fail_detail_wired_in_main():
@@ -57,7 +57,8 @@ def test_recovery_boot_wired_in_main():
     assert "tryHandleLaunchSnapBack()" in text
     assert "tryLaunchPendingHandoff()" not in text
     assert "saveHomeAppPartition()" in text
-    assert "gatewayPartitionReady()" not in text
+    assert "gatewayPartitionReady()" in text
+    assert "flashEmbeddedGatewayIfNeeded()" in text
     assert "beginWatchdog()" in text
     flash = FLASH_CPP.read_text(encoding="utf-8")
     assert "shouldHardwareResetRestoreHome" in flash
@@ -81,8 +82,8 @@ def test_recovery_helpers_declared():
         "isLaunchPending",
         "clearLaunchPending",
         "launchStagedAppSession",
+        "runSlotOtaPartition",
         "markPartitionOtaState",
-        "tryLaunchPendingHandoff",
         "tryHandleLaunchSnapBack",
         "logBootPartitionContext",
         "beginLaunchSession",

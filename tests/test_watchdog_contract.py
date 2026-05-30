@@ -37,16 +37,14 @@ def test_watchdog_uses_twdt_and_shutdown_restore():
     assert "trigger_panic" in text or "esp_task_wdt_init(kWatchdogTimeoutSec" in text
 
 
-def test_launch_pending_skips_shutdown_restore_on_load_app():
+def test_launch_pending_removed_from_flash():
     flash = FLASH_CPP.read_text(encoding="utf-8")
+    assert "tryLaunchPendingHandoff" not in flash
     reboot = flash[flash.index("bool rebootIntoStagedApp") : flash.index("bool nvsSetFlag")]
     assert "esp_restart()" in reboot
     assert "restoreBootToHome()" not in reboot
     assert "setBootPartitionForLaunch(target)" in reboot
     assert "setLaunchPending(true)" in reboot
-    handoff = flash[flash.index("bool tryLaunchPendingHandoff") : flash.index("bool tryHandleLaunchSnapBack")]
-    assert "rebootIntoStagedApp" not in handoff
-    assert "return false" in handoff
 
 
 def test_crash_reset_restores_home():
@@ -69,6 +67,6 @@ def test_watchdog_symbols_declared():
     assert "beginWatchdog" in header
     assert "feedWatchdog" in header
     for sym in ("applyCrashResetHomeRestore", "setLaunchPending", "isLaunchPending", "clearLaunchPending",
-                "beginLaunchSession", "tryLaunchPendingHandoff", "resolveLaunchBootPartition",
+                "beginLaunchSession", "resolveLaunchBootPartition", "runSlotOtaPartition",
                 "consumeLaunchFailDetail"):
         assert sym in FLASH_H.read_text(encoding="utf-8")

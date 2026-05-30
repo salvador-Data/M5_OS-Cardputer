@@ -31,7 +31,7 @@ namespace {
 
 
 
-constexpr size_t kGatewayMaxBytes = 0x70000;
+constexpr size_t kGatewayMaxBytes = kGatewayPartitionBytes;
 
 constexpr size_t kFlashChunk = 4096;
 
@@ -121,25 +121,13 @@ const esp_partition_t* gatewayOtaPartition() {
 
 
 
-const esp_partition_t* runSlotOtaPartition() {
-    const esp_partition_t* app2 =
-        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_2, nullptr);
-    if (app2) return app2;
-    const esp_partition_t* app1 =
-        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
-    if (app1 && app1->size >= kMinRunSlotPartitionBytes) return app1;
-    return nullptr;
-}
-
-
-
 bool gatewayPartitionReady() {
 
     const esp_partition_t* gw = gatewayOtaPartition();
 
     const esp_partition_t* run = runSlotOtaPartition();
 
-    if (!gw || !run || gw == run || gw->size < 0x70000) return false;
+    if (!gw || !run || gw == run || gw->size < kGatewayPartitionBytes) return false;
 
     return partitionHasAppMagic(gw);
 

@@ -1,4 +1,4 @@
-# Write session gateway firmware to app1 offset (0x3E0000) without overwriting M5 OS on app0.
+# Write session gateway firmware to app1 @ 0x400000 (not inside app0).
 param(
     [string]$Port = "COM13"
 )

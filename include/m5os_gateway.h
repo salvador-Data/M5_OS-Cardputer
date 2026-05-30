@@ -22,18 +22,6 @@ const esp_partition_t* gatewayOtaPartition();
 
 
 
-/** Foreign app run slot (ota_2 / app2, or ota_1 on legacy 2-slot tables). */
-
-const esp_partition_t* runSlotOtaPartition();
-
-
-
-/** @deprecated Use runSlotOtaPartition — kept for tests and call sites. */
-
-const esp_partition_t* stagingOtaPartition();
-
-
-
 /** True when gateway partition holds a valid ESP image (0xE9). */
 
 bool gatewayPartitionReady();

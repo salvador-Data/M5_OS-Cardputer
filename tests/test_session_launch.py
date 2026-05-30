@@ -38,8 +38,9 @@ def test_session_marks_staged_valid_before_reboot():
     assert "setRtcBootStagedHandoff()" in fn
     assert "ESP_OTA_IMG_PENDING_VERIFY" not in fn
     assert "esp_restart()" in fn
-    assert "launchGatewaySession" not in fn
-    assert "setAppSessionActive(true)" in flash[flash.index("void beginLaunchSession") : flash.index("void cancelLaunchSession")]
+    gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
+    assert "launchGatewaySession()" in gateway
+    assert "markPartitionOtaState(run, ESP_OTA_IMG_VALID)" in gateway
 
 
 def test_recovery_splash_and_save_exit_flag():
@@ -58,11 +59,11 @@ def test_session_save_prompt_wired_in_main():
     assert main.index("tryEarlyRecoveryBoot()") < main.index("isSessionReturnBoot()")
 
 
-def test_prepare_launch_sd_before_session():
+def test_prepare_launch_sd_before_copy():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
     helper = text[text.index("LaunchResult launchFromOpenFile") : text.index("AppLauncher::AppLauncher")]
     assert "prepareLaunchSd" in helper
-    assert helper.index("prepareLaunchSd") < helper.index("beginLaunchSession()")
+    assert helper.index("prepareLaunchSd") < helper.index("copySdToOta")
 
 
 def test_session_json_and_save_dirs():
@@ -83,10 +84,10 @@ def test_launcher_documents_reset_exit():
     assert "Gateway: ESC=OS" in text or "Reset=exit" in text
 
 
-def test_launch_uses_direct_staged_session():
+def test_launch_uses_gateway_session():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
-    assert "launchStagedAppSession()" in text
-    assert "launchGatewaySession()" not in text
+    assert "launchGatewaySession()" in text
+    assert "launchStagedAppSession()" not in text
 
 
 def test_readme_session_recovery_docs():

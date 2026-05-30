@@ -1,7 +1,7 @@
 /*
  * M5 OS Cardputer — second-stage bootloader override.
  *
- * Loaded apps run from app1 (ota_1) with otadata pointing there after Load app.
+ * Loaded apps run from app2 (ota_2) with session gateway on app1.
  * Recovery logic lives in app0; without forcing app0 on hardware reset, users stay
  * in foreign firmware indefinitely.
  *

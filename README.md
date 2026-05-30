@@ -316,41 +316,51 @@ Shipped catalog entries link Hacker Planet apps:
 
 ---
 
-## Load app, exit paths, and freeze handling
+## Load app, session gateway, exit paths, and freeze handling
 
-Partition layout (`partitions/m5os_cardputer_8MB.csv`): **app0** = M5 OS (~3.94 MiB), **app1** = foreign app run slot (**4 MB** / 0x400000).
+Partition layout (`partitions/m5os_cardputer_8MB.csv`) on 8 MB flash:
 
-**Load app** and **Load from M5Burner catalog** copy the app slice to **app1**, mark the slot **VALID** (not `PENDING_VERIFY`, so foreign `esp_restart()` during init does not roll back), set otadata, and **reboot once** into the loaded firmware. No session gateway screen.
+| Slot | Role | Offset | Size |
+|------|------|--------|------|
+| **app0** | M5 OS home | 0x10000 | ~3.94 MiB (0x3F0000) |
+| **app1** | Session gateway (permanent) | 0x400000 | 448 KiB (0x70000) |
+| **app2** | Foreign app run slot | 0x470000 | ~3.56 MiB (0x390000) |
 
-**M5Burner catalog:** streams the app over Wi-Fi, saves a copy under `/apps/<slug>/` on SD (apps coexist; nothing is deleted to switch), then chains **Load app** with Tab fast load when the bin is on SD.
+**Load app** and **Load from M5Burner catalog** copy an **app-only ESP32-S3** `.bin` to **app2** via `esp_ota_begin` / `esp_ota_write` / `esp_ota_end`, mark the slot **VALID**, ensure the session gateway is on **app1** (embedded auto-install on boot if missing), then reboot into the **session gateway**. On the gateway screen:
 
-**Troubleshooting — “App too large for OTA slot”:** Apps must fit **app1** (**4 MB**). Load app shows **App X.XX MB / slot Y.YY MB — too large** before copying.
+- **ESC** or **`** (or hold 1 s) → M5 OS home + **Save files before exit?** when returning from a loaded app session
+- **Enter** or **6 s auto-launch** → boot **app2** (foreign firmware)
 
-**Troubleshooting — snapback to M5 OS after reboot (“App did not start”):** Load app copies via **`esp_ota_begin` / `esp_ota_write` / `esp_ota_end`** (same path as ESP-IDF OTA and Boris Launcher), sets **otadata** with `esp_ota_set_boot_partition`, marks the slot **VALID** (rollback-safe for foreign `esp_restart()` during init), then reboots once. If you land back in M5 OS with an SW reset, the bootloader rejected **app1** — common causes:
+**M5Burner catalog:** streams the app over Wi-Fi, saves a copy under `/apps/<slug>/` on SD, then chains **Load app** with Tab fast load when the bin is on SD.
+
+**Troubleshooting — “App too large for OTA slot”:** Apps must fit **app2** (**0x390000** / ~3.56 MiB). Load app shows **App X.XX MB / slot Y.YY MB — too large** before copying.
+
+**Troubleshooting — snapback to M5 OS after gateway Enter:** Load app copies via OTA API, sets **otadata** with `esp_ota_set_boot_partition`, marks **VALID**, then gateway launches app2. If you land back in M5 OS with an SW reset after Enter, the bootloader rejected **app2** — common causes:
 
 | Symptom / log | Likely cause | Fix |
 |---------------|--------------|-----|
 | `launch_composite_reject` / “Merged flash bin” | SD file is a **full flash image** (bootloader + partition table + app at 0x10000), not an app-only `.bin` | Use M5Burner **catalog** (slices app offset) or an **app-only** build artifact |
 | `launch_chip_fail` / “Wrong chip 0x…” | Bin built for **ESP32** or **C3**, not **ESP32-S3** (Cardputer) | Rebuild with `board = m5stack-cardputer` / ESP32-S3 target |
 | `m5os_ota_end_fail` / “Image verify failed” | Corrupt download or truncated file | Re-copy; use Enter (hash verify) not Tab fast load |
-| `m5os_launch_snapback` + boot still `app0` | Prior **otadata** or invalid staged image | Menu → recovery / `scripts/flash_recovery.ps1`; reflash M5 OS then Load app |
+| `launch_gateway_fail` | Gateway missing on app1 | `scripts/flash_all.ps1` or `pio run -t upload-all` (app0 + gateway) |
 | App needs **SPIFFS** on flash | Composite Bruce/Nemo-style package | **M5Burner USB full flash** — Load app cannot create SPIFFS on this partition table |
 
-On-screen **Load app** debug shows `run:` / `boot:` / `slot:` partition labels, flash offsets, and sizes before copy and reboot. USB serial: `m5os_boot_part`, `m5os_launch_reboot`, `m5os_launch_snapback`, `m5os_launch_snapback_dbg`.
+On-screen **Load app** debug shows `run:` / `boot:` / `slot:` partition labels, flash offsets, and sizes before copy and reboot. USB serial: `m5os_boot_part`, `gw_launch_reboot`, `m5os_launch_snapback`, `m5os_launch_snapback_dbg`.
 
-**Honest limit:** M5 OS uses a **dual-OTA** table with **no SPIFFS partition**. Apps that require on-flash SPIFFS/LittleFS still need a **M5Burner USB composite flash** (Boris Launcher “Part Change” schemes). SD-stored copies are fine; running them is not.
+**Honest limit:** M5 OS uses a **triple-OTA** table with **no SPIFFS partition**. Apps that require on-flash SPIFFS/LittleFS still need a **M5Burner USB composite flash** (Boris Launcher “Part Change” schemes). SD-stored copies are fine; running them is not.
 
 | Trigger | Result |
 |---------|--------|
-| **Load app → Enter confirm** | Progress bar → single reboot into app1 |
+| **Load app → Enter confirm** | Progress bar → copy app2 → **session gateway** → Enter or wait → app2 |
+| **ESC/` on session gateway** | M5 OS → **Save files before exit?** when session was active |
 | **ESC/` while M5 OS menu is running** | Recovery splash → home |
 | **ESC inside a loaded third-party app** | **Not available** — that firmware owns the keyboard |
-| **Side reset while app loaded** | M5 OS → **Save files before exit?** (`y` / `n`) when session was active |
+| **Side reset while app loaded** | M5 OS → **Save files before exit?** when session was active |
 | **Cold power switch off/on** | M5 OS home (no save prompt) |
 | **Hold BtnA or ESC/` at power-on** | Recovery splash → M5 OS |
 | **Menu watchdog (30 s)** | TWDT restores home otadata and reboots |
 
-USB dev flash: plain **`pio run -t upload`** writes M5 OS to app0 (stock bootloader). Menu → **M5Burner / recovery** shows USB and on-device recovery steps.
+USB dev flash: **`scripts/flash_all.ps1`** or **`pio run -t upload-all`** writes M5 OS to **app0** and session gateway to **app1** @ **0x400000**. Plain **`pio run -t upload`** writes M5 OS only (gateway auto-installs from embed on next boot if missing). Menu → **M5Burner / recovery** shows USB and on-device recovery steps.
 
 ---
 

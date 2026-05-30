@@ -8,7 +8,7 @@ FLASH_H = ROOT / "include" / "m5os_flash.h"
 APP_LAUNCHER = ROOT / "src" / "app_launcher.cpp"
 CONFIG_H = ROOT / "include" / "m5os_config.h"
 PARTITIONS = ROOT / "partitions" / "m5os_cardputer_8MB.csv"
-RUN_SLOT_BYTES = 0x400000
+RUN_SLOT_BYTES = 0x390000
 
 
 def test_size_helpers_declared():
@@ -37,9 +37,9 @@ def test_copy_path_rejects_oversize_before_write():
 def test_max_loadable_matches_partition():
     cfg = CONFIG_H.read_text(encoding="utf-8")
     part = PARTITIONS.read_text(encoding="utf-8")
-    assert "0x400000" in cfg
-    assert "0x400000" in part
-    assert RUN_SLOT_BYTES == 4194304
+    assert "0x390000" in cfg
+    assert "0x390000" in part
+    assert RUN_SLOT_BYTES == 3735552
 
 
 def test_bundled_firmware_bins_fit_run_slot():

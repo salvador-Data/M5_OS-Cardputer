@@ -165,15 +165,14 @@ def test_launch_phases_use_load_app_label():
     assert "Already loaded" in helper
 
 
-def test_launch_begins_session_before_copy():
+def test_launch_reboots_into_gateway():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
     helper = text[text.index("LaunchResult launchFromOpenFile") : text.index(
         "AppLauncher::AppLauncher"
     )]
-    assert "beginLaunchSession()" in helper
-    assert helper.index("beginLaunchSession()") < helper.index("copySdToOta")
-    assert "launchStagedAppSession()" in helper
-    assert "cancelLaunchSession()" in helper
+    assert "rebootIntoGatewaySession" in helper
+    assert "launchGatewaySession()" in text
+    assert "beginLaunchSession()" not in helper
 
 
 def test_launch_reopens_sd_file_after_hash():

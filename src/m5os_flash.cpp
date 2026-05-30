@@ -420,7 +420,17 @@ bool nvsGetFlag(const char* key) {
 
 
 const esp_partition_t* stagingOtaPartition() {
-    return esp_ota_get_next_update_partition(nullptr);
+    return runSlotOtaPartition();
+}
+
+const esp_partition_t* runSlotOtaPartition() {
+    const esp_partition_t* app2 =
+        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_2, nullptr);
+    if (app2) return app2;
+    const esp_partition_t* app1 =
+        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
+    if (app1 && app1->size >= kMinRunSlotPartitionBytes) return app1;
+    return nullptr;
 }
 
 bool verifyPartitionAppImage(const esp_partition_t* part) {
@@ -849,18 +859,6 @@ void cancelLaunchSession() {
 
 
 bool launchSessionActive() { return gLaunchRestartPending || isAppSessionActive() || isLaunchPending(); }
-
-
-
-bool tryLaunchPendingHandoff() {
-
-    /* Single-reboot launch (9135c9e+): phase-2 handoff removed to avoid double esp_restart. */
-
-    if (isLaunchPending()) log::info("m5os_handoff_legacy", "noop");
-
-    return false;
-
-}
 
 
 

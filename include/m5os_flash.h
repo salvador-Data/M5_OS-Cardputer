@@ -124,12 +124,6 @@ const esp_partition_t* resolveLaunchBootPartition();
 
 
 
-/** Phase-2: deprecated — single-reboot launch; kept for ABI/tests. */
-
-bool tryLaunchPendingHandoff();
-
-
-
 /** After Load app, M5 OS still on home via SW reset (run slot did not stay loaded). */
 
 bool tryHandleLaunchSnapBack();
@@ -166,6 +160,10 @@ bool launchStagedAppSession();
 
 
 
+/** Foreign-app run slot (app2, or legacy app1 when >= kMinRunSlotPartitionBytes). */
+const esp_partition_t* runSlotOtaPartition();
+
+/** @deprecated alias — use runSlotOtaPartition(). */
 const esp_partition_t* stagingOtaPartition();
 
 /** ESP image header + esp_image_verify on a partition (after SD copy). */

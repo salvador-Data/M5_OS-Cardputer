@@ -7,7 +7,7 @@ from pathlib import Path
 PROJECT_DIR = Path(env.subst("$PROJECT_DIR"))
 GATEWAY_ENV = "m5os-session-gateway"
 GATEWAY_BIN = PROJECT_DIR / ".pio" / "build" / GATEWAY_ENV / "firmware.bin"
-APP1_OFFSET = "0x3D0000"
+APP1_OFFSET = "0x400000"
 
 
 def _gateway_bin():

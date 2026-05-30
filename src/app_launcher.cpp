@@ -12,6 +12,8 @@
 
 #include "m5os_flash.h"
 
+#include "m5os_gateway.h"
+
 #include "m5os_session.h"
 
 #include "m5os_vfs.h"
@@ -107,6 +109,17 @@ void surfaceLaunchFailure(const String& appLabel, LaunchResult& result) {
 void surfaceLaunchRebootFailure(const String& appLabel, LaunchResult& result) {
     result.message = formatLaunchFailMessage(peekLaunchFailDetail());
     surfaceLaunchFailure(appLabel, result);
+}
+
+bool rebootIntoGatewaySession(const String& appLabel, LaunchResult& result) {
+    paintLoadAppPhase(100, appLabel, "Session gateway", "Rebooting...");
+    ui::showMessage("Load app", appLabel + "\nSession gateway\nRebooting...", TFT_GREEN, 900);
+    if (launchGatewaySession()) return true;
+    result.ok = false;
+    result.message = "Gateway launch failed\nReflash M5 OS + gateway";
+    log::info("launch_gateway_fail", appLabel);
+    surfaceLaunchFailure(appLabel, result);
+    return false;
 }
 
 void paintLaunchProgress(size_t done, size_t total, LaunchProgressCtx* ctx) {
@@ -402,32 +415,14 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     session::prepareLaunchSd(path, cacheKey, meta);
 
-    beginLaunchSession();
-
     if (!userSkipHash && canSkipFlashToCachedOta(cacheKey, sdDigest)) {
         firmware.close();
         paintLoadAppPhase(100, label, "Rebooting", "Already loaded");
         result.ok = true;
         result.skippedFlash = true;
-        result.message = "Rebooting into app";
+        result.message = "Rebooting into gateway";
         log::info("launch_cached_ok", cacheKey);
-        ui::showMessage("Load app", label + "\nRun slot ready\nRebooting...", TFT_GREEN, 900);
-
-        if (!resolveLaunchBootPartition()) {
-            cancelLaunchSession();
-            result.ok = false;
-            result.message = "No valid app in run slot\nRe-copy from SD";
-            log::info("launch_no_target", "cached");
-            surfaceLaunchFailure(label, result);
-            return result;
-        }
-
-        if (launchStagedAppSession()) return result;
-
-        cancelLaunchSession();
-        result.ok = false;
-        log::info("launch_reboot_fail", "cached");
-        surfaceLaunchRebootFailure(label, result);
+        if (rebootIntoGatewaySession(label, result)) return result;
         return result;
     }
 
@@ -443,7 +438,6 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     if (!copySdToOta(firmware, firmwareSize, label, result)) {
         firmware.close();
-        cancelLaunchSession();
         surfaceLaunchFailure(label, result);
         return result;
     }
@@ -453,26 +447,10 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     paintLoadAppDebugPhase(100, label, "Rebooting");
     result.ok = true;
-    result.message = "Rebooting into app";
+    result.message = "Rebooting into gateway";
     log::info("launch_ok", cacheKey);
     log::info("launch_boot_dbg", formatOtaSlotDebug());
-    ui::showMessage("Load app", label + "\nRebooting...\n" + formatOtaSlotDebug(), TFT_GREEN, 1200);
-
-    if (!resolveLaunchBootPartition()) {
-        cancelLaunchSession();
-        result.ok = false;
-        result.message = "No valid app in run slot\nRe-copy from SD";
-        log::info("launch_no_target", "copy");
-        surfaceLaunchFailure(label, result);
-        return result;
-    }
-
-    if (launchStagedAppSession()) return result;
-
-    cancelLaunchSession();
-    result.ok = false;
-    log::info("launch_reboot_fail", "copy");
-    surfaceLaunchRebootFailure(label, result);
+    if (rebootIntoGatewaySession(label, result)) return result;
     return result;
 }
 

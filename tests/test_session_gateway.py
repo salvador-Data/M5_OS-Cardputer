@@ -1,4 +1,4 @@
-"""Load app uses direct OTA reboot (c27be49); gateway code optional, not on load path."""
+"""Session gateway on app1; Load app copies to app2 then reboots into gateway."""
 
 from pathlib import Path
 
@@ -9,55 +9,73 @@ FLASH_CPP = ROOT / "src" / "m5os_flash.cpp"
 MAIN_CPP = ROOT / "src" / "main.cpp"
 README = ROOT / "README.md"
 PLATFORMIO = ROOT / "platformio.ini"
+UPLOAD_EXTRA = ROOT / "scripts" / "upload_all_extra.py"
+GATEWAY_MAIN = ROOT / "src" / "session_gateway_main.cpp"
 
 
-def test_dual_slot_partition_table():
+def test_triple_slot_partition_table():
     text = PARTITIONS.read_text(encoding="utf-8")
     assert "app0" in text and "ota_0" in text
     assert "app1" in text and "ota_1" in text
+    assert "app2" in text and "ota_2" in text
     assert "0x400000" in text
-    assert "ota_2" not in text
-    assert "0x70000" not in text
+    assert "0x70000" in text
+    assert "0x390000" in text
 
 
-def test_launcher_uses_direct_staged_session():
+def test_launcher_uses_gateway_session():
     text = APP_LAUNCHER.read_text(encoding="utf-8")
-    assert "launchStagedAppSession()" in text
-    assert "resolveLaunchBootPartition()" in text
-    assert "launchGatewaySession()" not in text
-    assert "flashEmbeddedGatewayIfNeeded()" not in text
-    assert "m5os_gateway.h" not in text
+    assert "launchGatewaySession()" in text
+    assert "rebootIntoGatewaySession" in text
+    assert "launchStagedAppSession()" not in text
+    assert "m5os_gateway.h" in text
     assert "otaSlotWriterBegin" in text
 
 
-def test_staged_launch_in_flash_not_gateway():
+def test_run_slot_resolved_in_flash_not_next_ota():
     flash = FLASH_CPP.read_text(encoding="utf-8")
+    assert "runSlotOtaPartition()" in flash
+    assert "esp_ota_get_next_update_partition" not in flash
     assert "launchStagedAppSession() { return rebootIntoStagedApp" in flash.replace("\n", " ")
     gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
     assert "launchStagedAppSession()" not in gateway
 
 
-def test_boot_does_not_install_gateway():
+def test_boot_installs_gateway_when_missing():
     main = MAIN_CPP.read_text(encoding="utf-8")
-    assert "gatewayPartitionReady" not in main
-    assert "Installing session gateway" not in main
+    assert "flashEmbeddedGatewayIfNeeded()" in main
+    assert "gatewayPartitionReady()" in main
 
 
-def test_platformio_plain_m5_os_build():
+def test_platformio_builds_gateway_embed_and_upload_all():
     ini = PLATFORMIO.read_text(encoding="utf-8")
-    assert "prebuild_gateway_embed.py" not in ini
-    assert "upload_all_extra.py" not in ini
+    assert "prebuild_gateway_embed.py" in ini
+    assert "upload_all_extra.py" in ini
     assert "custom_bootloader" in ini
     assert "prebuild_bootloader.py" in ini
 
 
-def test_readme_documents_load_app_reboot():
+def test_upload_all_uses_app1_offset():
+    text = UPLOAD_EXTRA.read_text(encoding="utf-8")
+    assert 'APP1_OFFSET = "0x400000"' in text
+    assert "0x3D0000" not in text
+
+
+def test_gateway_keyboard_enter_and_esc():
+    main = GATEWAY_MAIN.read_text(encoding="utf-8")
+    assert "keyboardEnterJustPressed()" in main
+    assert "keyboardBackJustPressed()" in main
+    assert "m5os_keyboard.h" in main
+    assert "ESC/` = M5 OS" in main
+
+
+def test_readme_documents_gateway_flow():
     readme = README.read_text(encoding="utf-8")
     assert "Load app" in readme
-    assert "4 MB" in readme or "4MB" in readme or "0x400000" in readme
+    assert "session gateway" in readme.lower() or "Session gateway" in readme
+    assert "0x390000" in readme or "3.56" in readme or "3.5625" in readme
 
 
-def test_flash_recovery_leaves_app1_empty_for_load_app():
-    """Dual-OTA recovery must not flash legacy session gateway over the app1 run slot."""
+def test_flash_recovery_leaves_run_slot_for_load_app():
     script = (ROOT / "scripts" / "flash_recovery.ps1").read_text(encoding="utf-8")
     assert "flash_session_gateway.ps1" not in script
