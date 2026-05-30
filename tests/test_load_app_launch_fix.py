@@ -22,12 +22,20 @@ def test_reboot_sets_rtc_handoff_and_skip_validate_fallback():
     fn = flash[flash.index("bool rebootIntoStagedApp") : flash.index("bool nvsSetFlag")]
     assert "setRtcBootStagedHandoff()" in fn
     assert "setBootPartitionForLaunch(target)" in fn
-    assert fn.index("setBootPartitionForLaunch(target)") < fn.index("markPartitionOtaState(target")
+    assert fn.index("markPartitionOtaState(target") < fn.index("setBootPartitionForLaunch(target)")
+    assert "ensureOtadataBootsHome()" in fn
     assert "verifyPartitionAppImage(target)" in fn
     assert 'noteLaunchFail("otadata")' in fn
     assert "setLaunchPending(true)" in fn
     assert "clearLaunchPending()" not in fn
     assert "feedWatchdog()" in fn
+
+
+def test_ota_abort_restores_home_otadata():
+    flash = FLASH_CPP.read_text(encoding="utf-8")
+    fn = flash[flash.index("void otaSlotWriterAbort") : flash.index("String formatOtaSlotDebug")]
+    assert "ensureOtadataBootsHome()" in fn
+    assert "isRunningHomePartition()" in fn
 
 
 def test_copy_uses_esp_ota_api():

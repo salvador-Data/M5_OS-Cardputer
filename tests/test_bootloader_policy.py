@@ -42,7 +42,9 @@ def test_bootloader_recovery_gpio():
     assert "M5OS_RECOVERY_GPIO 0" in text
 
 
-def test_platformio_uses_stock_bootloader_for_load_app():
+def test_platformio_wires_custom_bootloader_for_recovery():
     text = PLATFORMIO.read_text(encoding="utf-8")
-    assert "custom_bootloader" not in text
-    assert "prebuild_bootloader.py" not in text
+    assert "custom_bootloader" in text
+    assert "prebuild_bootloader.py" in text
+    assert "m5os-cardputer" in text
+    assert "platformio_bootloader.ini" in text

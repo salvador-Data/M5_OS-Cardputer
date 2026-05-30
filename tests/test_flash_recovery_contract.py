@@ -72,6 +72,7 @@ def test_recovery_helpers_declared():
     for sym in (
         "saveHomeAppPartition",
         "restoreBootToHome",
+        "ensureOtadataBootsHome",
         "recoveryBootRequested",
         "tryEarlyRecoveryBoot",
         "applyColdBootHomeRestore",

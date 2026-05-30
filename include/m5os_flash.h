@@ -40,6 +40,9 @@ bool saveHomeAppPartition();
 
 bool restoreBootToHome();
 
+/** NVS home first, else running partition — after failed staging / launch. */
+bool ensureOtadataBootsHome();
+
 /** True when the running OTA partition matches saved home_label. */
 bool isRunningHomePartition();
 

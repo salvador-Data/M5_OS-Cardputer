@@ -302,19 +302,7 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
     beginLaunchSession();
 
-    // Boot partition first, then mark VALID (rollback enabled: set_boot alone leaves NEW).
-
-    if (!setBootPartitionForLaunch(target)) {
-
-        cancelLaunchSession();
-
-        noteLaunchFail("set_boot");
-
-        return false;
-
-    }
-
-
+    // Mark VALID before switching boot partition — failed mark leaves otadata on home.
 
     if (!markPartitionOtaState(target, ESP_OTA_IMG_VALID)) {
 
@@ -328,9 +316,25 @@ bool rebootIntoStagedApp(const char* phaseTag) {
 
 
 
+    if (!setBootPartitionForLaunch(target)) {
+
+        ensureOtadataBootsHome();
+
+        cancelLaunchSession();
+
+        noteLaunchFail("set_boot");
+
+        return false;
+
+    }
+
+
+
     const esp_partition_t* boot = esp_ota_get_boot_partition();
 
     if (boot != target) {
+
+        ensureOtadataBootsHome();
 
         cancelLaunchSession();
 
@@ -633,6 +637,24 @@ bool restoreBootToHome() {
     if (setErr == ESP_OK) log::info("m5os_home_restore", label);
 
     return setErr == ESP_OK;
+
+}
+
+
+
+bool ensureOtadataBootsHome() {
+
+    if (restoreBootToHome()) return true;
+
+    const esp_partition_t* running = esp_ota_get_running_partition();
+
+    if (!running) return false;
+
+    const esp_err_t err = esp_ota_set_boot_partition(running);
+
+    if (err == ESP_OK) log::info("m5os_home_restore", running->label);
+
+    return err == ESP_OK;
 
 }
 
@@ -1119,6 +1141,8 @@ void otaSlotWriterAbort(OtaSlotWriter& writer) {
     if (writer.active && writer.handle) esp_ota_abort(writer.handle);
 
     writer = OtaSlotWriter{};
+
+    if (isRunningHomePartition()) ensureOtadataBootsHome();
 
 }
 

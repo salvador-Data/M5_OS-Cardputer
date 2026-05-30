@@ -47,7 +47,8 @@ def test_platformio_plain_m5_os_build():
     ini = PLATFORMIO.read_text(encoding="utf-8")
     assert "prebuild_gateway_embed.py" not in ini
     assert "upload_all_extra.py" not in ini
-    assert "custom_bootloader" not in ini
+    assert "custom_bootloader" in ini
+    assert "prebuild_bootloader.py" in ini
 
 
 def test_readme_documents_load_app_reboot():
