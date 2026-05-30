@@ -81,6 +81,14 @@ def parse_threat_pack(raw: str | bytes | dict[str, Any]) -> dict[str, Any]:
     for item in hashes:
         normalize_sha256_hex(str(item))
 
+    allow_hashes = sigs.get("allow_hashes", [])
+    if not isinstance(allow_hashes, list):
+        raise ThreatPackError("signatures.allow_hashes must be array")
+    if len(allow_hashes) > HASH_MAX:
+        raise ThreatPackError(f"too many allow_hashes (max {HASH_MAX})")
+    for raw in allow_hashes:
+        normalize_sha256_hex(str(raw))
+
     strings = sigs.get("strings", [])
     if not isinstance(strings, list):
         raise ThreatPackError("signatures.strings must be array")

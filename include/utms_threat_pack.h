@@ -8,6 +8,7 @@ struct ThreatPackInfo {
     String version;
     String sha256Expected;
     size_t hashCount = 0;
+    size_t allowHashCount = 0;
     size_t stringCount = 0;
     bool loaded = false;
 };

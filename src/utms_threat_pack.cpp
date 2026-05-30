@@ -70,6 +70,14 @@ bool verifyPackDoc(JsonDocument& doc) {
         }
     }
 
+    JsonArray allowHashes = sigs["allow_hashes"].as<JsonArray>();
+    if (!allowHashes.isNull()) {
+        if (allowHashes.size() > kMaxHashes) return false;
+        for (JsonVariant v : allowHashes) {
+            if (!security::isValidSha256Hex(v.as<String>())) return false;
+        }
+    }
+
     const String expectedSha = security::normalizeSha256Hex(doc["sha256"] | "");
     if (expectedSha.length()) {
         doc.remove("sha256");
@@ -158,6 +166,8 @@ ThreatPackInfo loadPackInfo() {
         JsonArray hashes = sigs["hashes"].as<JsonArray>();
         JsonArray strings = sigs["strings"].as<JsonArray>();
         if (!hashes.isNull()) info.hashCount = hashes.size();
+        JsonArray allow = sigs["allow_hashes"].as<JsonArray>();
+        if (!allow.isNull()) info.allowHashCount = allow.size();
         if (!strings.isNull()) info.stringCount = strings.size();
     }
     info.loaded = info.version.length() > 0;

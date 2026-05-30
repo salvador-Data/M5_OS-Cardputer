@@ -1,5 +1,7 @@
 #include "m5os_security.h"
 
+#include "utms_firewall.h"
+
 #include "m5os_watchdog.h"
 
 #include <mbedtls/sha256.h>
@@ -44,7 +46,8 @@ bool isAllowedHttpsUrl(const String& url) {
     String path;
     const String host = extractHostAndPath(url, path);
     if (!host.length()) return false;
-    return isAllowedHostPath(host, path);
+    if (!isAllowedHostPath(host, path)) return false;
+    return utms::urlAllowedByFirewall(url);
 }
 
 String sanitizePathSegment(const String& raw) {
