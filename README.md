@@ -40,7 +40,7 @@ Product page: [Hacker Planet Cardputer](https://salvador-Data.github.io/cyberThr
 
 | Feature | Menu item | What it does |
 |---------|-----------|--------------|
-| **Load app** | Load app (ESC/`) | Pick a whitelisted `.bin` from `/apps/<name>/` and flash into **app1** run slot (**4 MB** max). **Enter** confirm → one reboot into the app. **Tab** = fast load (skip hash). Side reset / cold power returns M5 OS |
+| **Load app** | Load app (ESC/`) | Pick a whitelisted `.bin` from `/apps/<name>/`, copy to **app2** run slot (**~3.56 MB** max). Reboot → **session gateway** → Enter or 6 s auto-launch. **Tab** = fast load (skip hash). Side reset / cold power returns M5 OS |
 | **Load from catalog** | Load from catalog | Download manifest entries over Wi-Fi or from SD `/apps/manifest.json` |
 | **Load from M5Burner** | Load from M5Burner catalog | Browse LauncherHub Cardputer apps, stream firmware OTA, save a copy to SD |
 | **SD hard drive** | (automatic on boot) | FAT32 layout: `/system`, `/apps`, `/home/default`, `/tmp`, `/var/log` |
@@ -329,11 +329,22 @@ Partition layout (`partitions/m5os_cardputer_8MB.csv`) on 8 MB flash:
 **Load app** and **Load from M5Burner catalog** copy an **app-only ESP32-S3** `.bin` to **app2** via `esp_ota_begin` / `esp_ota_write` / `esp_ota_end`, mark the slot **VALID**, ensure the session gateway is on **app1** (embedded auto-install on boot if missing), then reboot into the **session gateway**. On the gateway screen:
 
 - **ESC** or **`** (or hold 1 s) → M5 OS home + **Save files before exit?** when returning from a loaded app session
-- **Enter** or **6 s auto-launch** → boot **app2** (foreign firmware)
+- **Enter** or **2 s auto-launch** → boot **app2** (foreign firmware)
 
 **M5Burner catalog:** streams the app over Wi-Fi, saves a copy under `/apps/<slug>/` on SD, then chains **Load app** with Tab fast load when the bin is on SD.
 
 **Troubleshooting — “App too large for OTA slot”:** Apps must fit **app2** (**0x390000** / ~3.56 MiB). Load app shows **App X.XX MB / slot Y.YY MB — too large** before copying.
+
+**Troubleshooting — Load app reboot loop or snapback to M5 OS**
+
+| Step | USB serial marker | Meaning |
+|------|-------------------|---------|
+| 1. Copy | `launch_copy_ok` | SD → app2 via esp_ota OK |
+| 2. Gateway reboot | `gw_launch_reboot` | otadata → app1 gateway |
+| 3. Gateway UI | (LCD) Session gateway | ESC/` = M5 OS; Enter = app |
+| 4. Run slot launch | `m5os_stage_ota_state` app2 → VALID | otadata marked before boot |
+| 5. App running | `m5os_boot_part` run:app2 | Foreign app owns CPU |
+| Fail snapback | `m5os_launch_snapback` | Bootloader stayed on app0 — see table below |
 
 **Troubleshooting — snapback to M5 OS after gateway Enter:** Load app copies via OTA API, sets **otadata** with `esp_ota_set_boot_partition`, marks **VALID**, then gateway launches app2. If you land back in M5 OS with an SW reset after Enter, the bootloader rejected **app2** — common causes:
 
@@ -391,7 +402,7 @@ M5_OS-Cardputer/
 |   |-- m5os_gc.cpp           # Storage cleanup (boot + menu)
 |   |-- launcher_menu.cpp     # Main menu and sub-screens
 |   |-- firmware_catalog.cpp  # Manifest + SD package manager
-|   |-- app_launcher.cpp      # Flash .bin from SD (esp_ota API → app1)
+|   |-- app_launcher.cpp      # Flash .bin from SD (esp_ota API → app2)
 |   |-- burner_install.cpp    # M5Burner / LauncherHub OTA load
 |   |-- ui_display.cpp        # Keyboard + LCD UI + boot splash
 |   |-- burner_bridge.cpp     # M5Burner recovery workflow

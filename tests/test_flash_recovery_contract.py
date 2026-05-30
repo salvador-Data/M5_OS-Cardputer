@@ -57,8 +57,8 @@ def test_recovery_boot_wired_in_main():
     assert "tryHandleLaunchSnapBack()" in text
     assert "tryLaunchPendingHandoff()" not in text
     assert "saveHomeAppPartition()" in text
-    assert "gatewayPartitionReady()" in text
-    assert "flashEmbeddedGatewayIfNeeded()" in text
+    assert "scheduleDeferredGatewayInstall()" in text
+    assert "tryDeferredGatewayInstall()" in text
     assert "beginWatchdog()" in text
     flash = FLASH_CPP.read_text(encoding="utf-8")
     assert "shouldHardwareResetRestoreHome" in flash

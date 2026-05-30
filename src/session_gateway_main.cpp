@@ -5,6 +5,7 @@
  */
 #include "m5os_gateway_shared.h"
 #include "m5os_keyboard.h"
+#include "m5os_otadata.h"
 
 #include <M5Cardputer.h>
 
@@ -40,7 +41,7 @@ void drawFrame(const char* statusLine, int countdownSec = -1) {
     d.println(statusLine);
     if (countdownSec >= 0) {
         d.setCursor(4, 72);
-        d.printf("Auto-launch in %ds", countdownSec);
+        d.printf("Auto-launch %ds", countdownSec);
     }
 }
 
@@ -67,12 +68,11 @@ bool partitionHasAppMagic(const esp_partition_t* part) {
 
 void exitToHome() {
     nvsSetFlag(m5os::gateway::kGatewayActiveKey, false);
-    nvsSetFlag("app_sess", true);
-    nvsSetFlag("sess_exit", true);
+    nvsSetFlag(m5os::gateway::kLaunchPendingKey, false);
+    nvsSetFlag(m5os::gateway::kAppSessionKey, true);
+    nvsSetFlag(m5os::gateway::kSessionExitKey, true);
     const esp_partition_t* home = homePartition();
     if (home) esp_ota_set_boot_partition(home);
-    delay(50);
-    /* No RTC handoff — bootloader must force M5 OS (app0) on this SW reset. */
     esp_restart();
 }
 
@@ -80,15 +80,26 @@ void launchRunSlot() {
     const esp_partition_t* run = runPartition();
     if (!run || !partitionHasAppMagic(run)) {
         drawFrame("No app in run slot");
-        delay(1200);
+        delay(400);
         exitToHome();
         return;
     }
     nvsSetFlag(m5os::gateway::kGatewayActiveKey, false);
-    nvsSetFlag("app_sess", true);
-    nvsSetFlag("sess_exit", false);
-    esp_ota_set_boot_partition(run);
-    delay(50);
+    if (!m5os::otadata::markPartitionOtaState(run, ESP_OTA_IMG_VALID)) {
+        drawFrame("otadata failed");
+        delay(400);
+        exitToHome();
+        return;
+    }
+    if (esp_ota_set_boot_partition(run) != ESP_OK) {
+        drawFrame("Boot switch failed");
+        delay(400);
+        exitToHome();
+        return;
+    }
+    nvsSetFlag(m5os::gateway::kLaunchPendingKey, true);
+    nvsSetFlag(m5os::gateway::kAppSessionKey, true);
+    nvsSetFlag(m5os::gateway::kSessionExitKey, false);
     m5os::gateway::setStagedBootHandoff();
     esp_restart();
 }
@@ -105,7 +116,7 @@ void setup() {
 
     const unsigned long uiStart = millis();
     const unsigned long autoLaunchAt = uiStart + m5os::gateway::kAutoLaunchMs;
-    drawFrame("Press ESC or wait");
+    drawFrame("Ready — Enter or wait");
     unsigned long escHoldStart = 0;
     int lastCountdown = -1;
     bool autoLaunchDone = false;
@@ -148,7 +159,7 @@ void setup() {
             now < autoLaunchAt ? static_cast<int>((autoLaunchAt - now + 999) / 1000) : 0;
         if (countdownSec != lastCountdown) {
             lastCountdown = countdownSec;
-            drawFrame(now < autoLaunchAt ? "ESC/` or hold 1s" : "Launching soon...", countdownSec);
+            drawFrame(now < autoLaunchAt ? "Enter=launch ESC=M5 OS" : "Launching...", countdownSec);
         }
         delay(20);
     }

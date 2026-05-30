@@ -1,4 +1,5 @@
 # Build M5 OS + session gateway, then flash app0 and app1 over USB.
+# Pre-installs gateway on app1 so Load app skips ~448 KiB embed flash wait.
 param(
     [string]$Port = "COM13",
     [switch]$SkipBuild

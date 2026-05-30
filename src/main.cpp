@@ -92,9 +92,7 @@ void setup() {
 
     m5os::saveHomeAppPartition();
 
-    if (!m5os::gatewayPartitionReady()) {
-        m5os::flashEmbeddedGatewayIfNeeded();
-    }
+    m5os::scheduleDeferredGatewayInstall();
 
     m5os::beginWatchdog();
 
@@ -209,6 +207,8 @@ void setup() {
 
 
 void loop() {
+
+    m5os::tryDeferredGatewayInstall();
 
     m5os::update();
 

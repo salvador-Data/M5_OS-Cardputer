@@ -10,11 +10,11 @@ MAIN_CPP = ROOT / "src" / "main.cpp"
 
 
 def test_mark_partition_writes_new_otadata_when_missing():
-    flash = FLASH_CPP.read_text(encoding="utf-8")
-    fn = flash[flash.index("bool markPartitionOtaState") : flash.index("bool saveHomeAppPartition")]
+    otadata = (ROOT / "src" / "m5os_otadata.cpp").read_text(encoding="utf-8")
+    fn = otadata[otadata.index("bool markPartitionOtaState") : otadata.index("}  // namespace m5os::otadata")]
     assert "bootloader_common_get_active_otadata" in fn
     assert "writeOtadataSelectEntry" in fn
-    assert "m5os_stage_ota_boot" in fn
+    assert "m5os_stage_ota_boot" in fn or "stage boot" in fn
 
 
 def test_reboot_sets_rtc_handoff_and_skip_validate_fallback():

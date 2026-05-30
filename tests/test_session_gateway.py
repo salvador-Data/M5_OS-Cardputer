@@ -43,8 +43,8 @@ def test_run_slot_resolved_in_flash_not_next_ota():
 
 def test_boot_installs_gateway_when_missing():
     main = MAIN_CPP.read_text(encoding="utf-8")
-    assert "flashEmbeddedGatewayIfNeeded()" in main
-    assert "gatewayPartitionReady()" in main
+    assert "scheduleDeferredGatewayInstall()" in main
+    assert "tryDeferredGatewayInstall()" in main
 
 
 def test_platformio_builds_gateway_embed_and_upload_all():

@@ -41,6 +41,8 @@ def test_session_marks_staged_valid_before_reboot():
     gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
     assert "launchGatewaySession()" in gateway
     assert "markPartitionOtaState(run, ESP_OTA_IMG_VALID)" in gateway
+    gw_main = (ROOT / "src" / "session_gateway_main.cpp").read_text(encoding="utf-8")
+    assert "markPartitionOtaState(run, ESP_OTA_IMG_VALID)" in gw_main
 
 
 def test_recovery_splash_and_save_exit_flag():

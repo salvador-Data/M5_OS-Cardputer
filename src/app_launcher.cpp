@@ -112,8 +112,27 @@ void surfaceLaunchRebootFailure(const String& appLabel, LaunchResult& result) {
 }
 
 bool rebootIntoGatewaySession(const String& appLabel, LaunchResult& result) {
-    paintLoadAppPhase(100, appLabel, "Session gateway", "Rebooting...");
-    ui::showMessage("Load app", appLabel + "\nSession gateway\nRebooting...", TFT_GREEN, 900);
+    auto gwProgress = [](int percent, const char* phase) {
+        (void)phase;
+        ui::showFlashProgress(percent, "Load app", String("Session shell\n") + String(phase));
+        m5os::update();
+    };
+
+    if (gatewayPartitionReady()) {
+        paintLoadAppPhase(100, appLabel, "Session shell", "Ready — rebooting");
+        ui::showMessage("Load app", appLabel + "\nSession shell\nRebooting...", TFT_GREEN, 200);
+    } else {
+        paintLoadAppPhase(0, appLabel, "Session shell", "Installing gateway...");
+        if (!ensureGatewayInstalled(gwProgress)) {
+            result.ok = false;
+            result.message = "Gateway install failed\nRun flash_all.ps1";
+            log::info("launch_gateway_install_fail", appLabel);
+            surfaceLaunchFailure(appLabel, result);
+            return false;
+        }
+        paintLoadAppPhase(100, appLabel, "Session shell", "Ready — rebooting");
+    }
+
     if (launchGatewaySession()) return true;
     result.ok = false;
     result.message = "Gateway launch failed\nReflash M5 OS + gateway";

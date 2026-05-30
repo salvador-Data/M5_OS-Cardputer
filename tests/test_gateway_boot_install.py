@@ -9,8 +9,8 @@ GATEWAY_MAIN = ROOT / "src" / "session_gateway_main.cpp"
 
 def test_gateway_esc_ux_timings_in_optional_firmware():
     shared = GATEWAY_SHARED.read_text(encoding="utf-8")
-    assert "kAutoLaunchMs = 6000" in shared
+    assert "kAutoLaunchMs = 2000" in shared
     assert "kEscHoldMs = 1000" in shared
     main = GATEWAY_MAIN.read_text(encoding="utf-8")
     assert "ESC/` = M5 OS" in main
-    assert "Auto-launch in" in main
+    assert "Auto-launch" in main

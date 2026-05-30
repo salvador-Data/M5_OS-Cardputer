@@ -14,13 +14,19 @@ constexpr char kNvsNamespace[] = "m5os";
 
 constexpr char kGatewayActiveKey[] = "gw_active";
 
+constexpr char kLaunchPendingKey[] = "launch_pend";
+
+constexpr char kAppSessionKey[] = "app_sess";
+
+constexpr char kSessionExitKey[] = "sess_exit";
+
 constexpr char kStagingPath[] = "/home/default/.staging/run_app.bin";
 
 
 
-constexpr unsigned kMinGatewayUiMs = 2000;
+constexpr unsigned kMinGatewayUiMs = 0;
 
-constexpr unsigned kAutoLaunchMs = 6000;
+constexpr unsigned kAutoLaunchMs = 2000;
 
 constexpr unsigned kEscHoldMs = 1000;
 
