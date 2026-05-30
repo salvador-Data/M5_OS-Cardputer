@@ -410,11 +410,17 @@ String binPathFor(const String& appSlug, const String& binFile) {
     if (!safeBin.length()) return "";
     const String slug = slugFromName(appSlug.length() ? appSlug : safeBin.substring(0, safeBin.length() - 4));
     const String appPath = appDirFor(slug);
-    if (appPath.length()) {
-        const String compartment = appPath + "/" + safeBin;
-        if (SD.exists(compartment.c_str())) return compartment;
-    }
-    return String(kLegacyFirmwareDir) + "/" + safeBin;
+    const String compartment = appPath.length() ? appPath + "/" + safeBin : String("");
+    if (compartment.length() && SD.exists(compartment.c_str())) return compartment;
+
+    const String legacy = String(kLegacyFirmwareDir) + "/" + safeBin;
+    if (SD.exists(legacy.c_str())) return legacy;
+
+    // New saves: ensureAppDirs creates /apps/<slug>/ — do not fall back to /firmware/
+    // (legacy dir is not in the VFS mount tree and SD.open would fail).
+    if (compartment.length() && SD.exists(appPath.c_str())) return compartment;
+
+    return legacy;
 }
 
 bool ensureAppDirs(const String& appSlug) {

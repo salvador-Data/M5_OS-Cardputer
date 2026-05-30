@@ -169,6 +169,9 @@ const esp_partition_t* stagingOtaPartition();
 /** ESP image header + esp_image_verify on a partition (after SD copy). */
 bool verifyPartitionAppImage(const esp_partition_t* part);
 
+/** True when app2 already holds a launchable ESP32-S3 image matching expectedSize (bytes). */
+bool runSlotReadyForLaunch(size_t expectedSize);
+
 /** Mark a non-running OTA slot state in otadata (e.g. gateway or run slot). */
 bool markPartitionOtaState(const esp_partition_t* part, esp_ota_img_states_t targetState);
 

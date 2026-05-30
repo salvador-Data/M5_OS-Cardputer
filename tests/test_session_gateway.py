@@ -64,9 +64,21 @@ def test_upload_all_uses_app1_offset():
 def test_gateway_keyboard_enter_and_esc():
     main = GATEWAY_MAIN.read_text(encoding="utf-8")
     assert "keyboardEnterJustPressed()" in main
-    assert "keyboardBackJustPressed()" in main
+    assert "keyboardBackEdge" in main
+    assert "keyboardDrainEnter()" in main
+    assert "keyboardDrainBack()" in main
     assert "m5os_keyboard.h" in main
     assert "ESC/` = M5 OS" in main
+
+
+def test_keyboard_back_detects_grave_hid():
+    kb = (ROOT / "include" / "m5os_keyboard.h").read_text(encoding="utf-8")
+    assert "kHidGrave = 0x35" in kb
+    assert "keyboardBackEdge" in kb
+    held_fn = kb.split("inline bool keyboardBackHeld()")[1].split("inline bool keyboardBackEdge")[0]
+    assert "kHidGrave" in held_fn
+    edge_fn = kb.split("inline bool keyboardBackEdge")[1].split("inline bool keyboardBackJustPressed")[0]
+    assert "isChange()" not in edge_fn
 
 
 def test_readme_documents_gateway_flow():

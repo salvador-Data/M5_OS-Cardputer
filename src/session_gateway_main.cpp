@@ -114,17 +114,21 @@ void setup() {
 
     nvsSetFlag(m5os::gateway::kGatewayActiveKey, true);
 
+    m5os::keyboardDrainEnter();
+    m5os::keyboardDrainBack();
+
     const unsigned long uiStart = millis();
     const unsigned long autoLaunchAt = uiStart + m5os::gateway::kAutoLaunchMs;
     drawFrame("Ready — Enter or wait");
     unsigned long escHoldStart = 0;
+    bool backWasHeld = false;
     int lastCountdown = -1;
     bool autoLaunchDone = false;
 
     while (true) {
         M5Cardputer.update();
 
-        if (m5os::keyboardBackJustPressed()) {
+        if (m5os::keyboardBackEdge(backWasHeld)) {
             drawFrame("Returning to M5 OS...");
             M5Cardputer.update();
             exitToHome();

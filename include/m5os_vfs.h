@@ -65,7 +65,7 @@ String appDirFor(const String& appSlug);
 /** Per-app data dir: /home/default/apps/<slug>/ */
 String appDataDirFor(const String& appSlug);
 
-/** Resolve firmware .bin path — prefers /apps/<slug>/<bin>, falls back to /firmware/<bin>. */
+/** Resolve firmware .bin path — /apps/<slug>/<bin> when present or app dir exists; else /firmware/<bin>. */
 String binPathFor(const String& appSlug, const String& binFile);
 
 /** Slugify manifest name → safe directory segment. */

@@ -59,13 +59,13 @@ def test_explorer_confirm_accepts_keyboard_enter():
 
 
 def test_keyboard_enter_helpers():
-    text = DEVICE_H.read_text(encoding="utf-8")
     kb = (ROOT / "include" / "m5os_keyboard.h").read_text(encoding="utf-8")
-    assert "keyboardEnterJustPressed" in text
-    assert "keyboardDrainEnter" in text
-    assert "keyboardDrainBack" in text
-    assert "keyboardTabJustPressed" in text
-    assert "keyboardDrainTab" in text
+    device = DEVICE_H.read_text(encoding="utf-8")
+    assert "keyboardEnterJustPressed" in device
+    assert "keyboardDrainEnter" in kb
+    assert "keyboardDrainBack" in kb
+    assert "keyboardTabJustPressed" in kb
+    assert "keyboardDrainTab" in kb
     assert "kHidEnter" in kb
     assert "keysState().enter like WiFi password" in kb
     enter_fn = kb.split("keyboardEnterJustPressed")[1].split("keyboardEnterHeld")[0]
@@ -219,7 +219,8 @@ def test_fast_load_skip_hash_option():
     assert "launch_fast_load" in fn
     assert "launch_checksum_user_skip" in fn
     assert fn.index("if (userSkipHash)") < fn.index("tryLoadCachedDigest")
-    assert "if (!userSkipHash && canSkipFlashToCachedOta" in fn
+    assert "canSkipFlashToCachedOta" in fn
+    assert "runSlotReadyForLaunch(firmwareSize)" in fn
     assert "if (!userSkipHash) storeLaunchCache" in fn
     assert "launch_chip_fail" in app
 
@@ -235,15 +236,15 @@ def test_load_confirm_enter_tab_prompt():
     assert "launchBinPath(fullPath, opts)" in text
 
     device_h = DEVICE_H.read_text(encoding="utf-8")
-    assert "keyboardTabJustPressed" in device_h
-    assert "keyboardDrainTab" in device_h
+    kb_h = (ROOT / "include" / "m5os_keyboard.h").read_text(encoding="utf-8")
+    assert "keyboardTabJustPressed" in kb_h
+    assert "keyboardDrainTab" in kb_h
+    assert "keyboardEnterJustPressed" in device_h
 
 
-def test_fast_load_still_copies_with_progress():
+def test_fast_load_skips_recopy_when_run_slot_ready():
     text = APP_LAUNCHER_CPP.read_text(encoding="utf-8")
     fn = text[text.index("LaunchResult launchFromOpenFile") : text.index("AppLauncher::AppLauncher")]
+    assert "runSlotReadyForLaunch(firmwareSize)" in fn
     assert "copySdToOta" in fn
-    assert fn.index("userSkipHash") < fn.index("copySdToOta")
-    copy = text[text.index("bool copySdToOta") : text.index("LaunchResult launchFromOpenFile")]
-    assert "validateAppImageChipTarget" in copy
-    assert "paintLaunchProgress" in copy
+    assert fn.index("runSlotReadyForLaunch") < fn.index("copySdToOta")

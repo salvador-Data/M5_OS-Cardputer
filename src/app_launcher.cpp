@@ -434,13 +434,15 @@ LaunchResult launchFromOpenFile(const String& path, const String& cacheKey, cons
 
     session::prepareLaunchSd(path, cacheKey, meta);
 
-    if (!userSkipHash && canSkipFlashToCachedOta(cacheKey, sdDigest)) {
+    const bool runSlotReady = runSlotReadyForLaunch(firmwareSize);
+    if ((!userSkipHash && canSkipFlashToCachedOta(cacheKey, sdDigest)) || runSlotReady) {
         firmware.close();
-        paintLoadAppPhase(100, label, "Rebooting", "Already loaded");
+        paintLoadAppPhase(100, label, "Rebooting",
+                           runSlotReady ? "Run slot ready" : "Already loaded");
         result.ok = true;
         result.skippedFlash = true;
         result.message = "Rebooting into gateway";
-        log::info("launch_cached_ok", cacheKey);
+        log::info(runSlotReady ? "launch_run_slot_ready" : "launch_cached_ok", cacheKey);
         if (rebootIntoGatewaySession(label, result)) return result;
         return result;
     }

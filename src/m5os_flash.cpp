@@ -369,6 +369,25 @@ bool verifyPartitionAppImage(const esp_partition_t* part) {
     return esp_image_verify(ESP_IMAGE_VERIFY, &pos, &metadata) == ESP_OK;
 }
 
+bool runSlotReadyForLaunch(size_t expectedSize) {
+    const esp_partition_t* slot = runSlotOtaPartition();
+    if (!slot || expectedSize == 0 || expectedSize > slot->size) return false;
+    if (!verifyPartitionAppImage(slot)) return false;
+    if (!validateAppImageChipTarget(slot)) return false;
+
+    esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
+    if (esp_ota_get_state_partition(slot, &state) == ESP_OK) {
+        if (state == ESP_OTA_IMG_INVALID || state == ESP_OTA_IMG_ABORTED) return false;
+    }
+
+    esp_partition_pos_t pos{};
+    pos.offset = slot->address;
+    pos.size = slot->size;
+    esp_image_metadata_t metadata{};
+    if (esp_image_verify(ESP_IMAGE_VERIFY, &pos, &metadata) != ESP_OK) return false;
+    return metadata.image_len == expectedSize;
+}
+
 size_t maxOtaAppBytes() {
     const esp_partition_t* staging = stagingOtaPartition();
     if (staging && staging->size > 0) return staging->size;
@@ -485,9 +504,17 @@ bool isRunningHomePartition() {
 
     if (!running) return false;
 
+    const esp_partition_t* app0 =
+
+        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr);
+
     nvs_handle_t handle = 0;
 
-    if (nvs_open(kNvsNamespace, NVS_READONLY, &handle) != ESP_OK) return false;
+    if (nvs_open(kNvsNamespace, NVS_READONLY, &handle) != ESP_OK) {
+
+        return app0 && running == app0;
+
+    }
 
     char label[17]{};
 
@@ -497,7 +524,7 @@ bool isRunningHomePartition() {
 
     nvs_close(handle);
 
-    if (getErr != ESP_OK) return false;
+    if (getErr != ESP_OK) return app0 && running == app0;
 
     const esp_partition_t* home = partitionFromLabel(label);
 
@@ -519,7 +546,7 @@ bool recoveryBootRequested() {
 
     for (uint8_t hid : status.hid_keys) {
 
-        if (hid == kHidEscape) return true;
+        if (hid == kHidEscape || hid == kHidGrave) return true;
 
     }
 
@@ -932,6 +959,14 @@ bool otaSlotWriterFinish(OtaSlotWriter& writer, String* errOut) {
     if (!verifyPartitionAppImage(writer.part)) {
 
         if (errOut) *errOut = "Post-OTA verify failed";
+
+        return false;
+
+    }
+
+    if (!markPartitionOtaState(writer.part, ESP_OTA_IMG_VALID)) {
+
+        if (errOut) *errOut = "otadata VALID failed";
 
         return false;
 
