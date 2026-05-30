@@ -1,7 +1,6 @@
 #include "m5os_gateway.h"
 
-
-
+#include "m5os_config.h"
 #include "m5os_flash.h"
 
 #include "m5os_gateway_embed.h"
@@ -121,17 +120,13 @@ const esp_partition_t* gatewayOtaPartition() {
 
 
 const esp_partition_t* runSlotOtaPartition() {
-
     const esp_partition_t* app2 =
-
         esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_2, nullptr);
-
     if (app2) return app2;
-
-    return esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1,
-
-                                    nullptr);
-
+    const esp_partition_t* app1 =
+        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
+    if (app1 && app1->size >= kMinRunSlotPartitionBytes) return app1;
+    return nullptr;
 }
 
 

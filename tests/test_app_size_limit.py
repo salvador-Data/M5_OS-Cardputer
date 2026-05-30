@@ -49,3 +49,10 @@ def test_bundled_firmware_bins_fit_run_slot():
     for path in fw_dir.glob("*.bin"):
         size = path.stat().st_size
         assert size <= RUN_SLOT_BYTES, f"{path.name} is {size} bytes > run slot {RUN_SLOT_BYTES}"
+
+
+def test_burner_plan_uses_size_helper_message():
+    text = (ROOT / "src" / "burner_install.cpp").read_text(encoding="utf-8")
+    assert "planTooLargeMessage" in text
+    assert "formatAppTooLargeMessage" in text
+    assert '"App too large for OTA slot"' not in text

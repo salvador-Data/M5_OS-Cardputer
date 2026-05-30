@@ -27,6 +27,10 @@ constexpr uint32_t kStreamIdleMaxMs = 300000;
 constexpr uint8_t kHttpMaxAttempts = 3;
 constexpr size_t kStreamChunkBytes = 64;
 
+String planTooLargeMessage(uint32_t appSize, size_t otaLimit) {
+    return formatAppTooLargeMessage(static_cast<size_t>(appSize), otaLimit);
+}
+
 uint32_t streamIdleTimeoutMs(size_t imageSize) {
     // ~1 ms idle budget per 32 bytes — Bruce ~4 MB needs several minutes on slow WiFi.
     const uint32_t scaled = static_cast<uint32_t>(imageSize / 32U);
@@ -626,7 +630,7 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
             const size_t slice = remoteSize - plan.appOffset;
             if (slice > otaLimit) {
                 plan.appSize = static_cast<uint32_t>(slice);
-                setPlanError(errOut, "Plan", 0, "App too large for OTA slot");
+                setPlanError(errOut, "Plan", 0, planTooLargeMessage(plan.appSize, otaLimit).c_str());
                 return false;
             }
             plan.appSize = static_cast<uint32_t>(slice);
@@ -634,7 +638,7 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
         } else if (plan.noBootloader) {
             if (remoteSize > otaLimit) {
                 plan.appSize = static_cast<uint32_t>(remoteSize);
-                setPlanError(errOut, "Plan", 0, "App too large for OTA slot");
+                setPlanError(errOut, "Plan", 0, planTooLargeMessage(plan.appSize, otaLimit).c_str());
                 return false;
             }
             plan.appSize = static_cast<uint32_t>(remoteSize);
@@ -646,7 +650,8 @@ bool buildInstallPlan(const String& fid, const String& version, BurnerInstallPla
 
     if (!finalizePlanSize(plan)) {
         setPlanError(errOut, "Plan", 0,
-                     plan.appSize > otaLimit ? "App too large for OTA slot" : "Invalid install plan");
+                     plan.appSize > otaLimit ? planTooLargeMessage(plan.appSize, otaLimit).c_str()
+                                             : "Invalid install plan");
         return false;
     }
     return true;
@@ -660,7 +665,8 @@ BurnerFlashResult flashAppToOta(const BurnerInstallPlan& plan, const String& sdP
     }
     const size_t otaLimit = maxOtaAppBytes();
     if (!plan.downloadUrl.length() || plan.appSize == 0 || plan.appSize > otaLimit) {
-        result.message = plan.appSize > otaLimit ? "App too large for OTA slot" : "Invalid install plan";
+        result.message = plan.appSize > otaLimit ? planTooLargeMessage(plan.appSize, otaLimit)
+                                                 : "Invalid install plan";
         return result;
     }
 
@@ -748,7 +754,8 @@ BurnerDownloadResult downloadPlanToSd(const BurnerInstallPlan& plan, const Strin
     }
     if (plan.appSize > maxOtaAppBytes()) {
         result.stage = "Plan";
-        result.message = "App too large for OTA slot";
+        const size_t otaLimit = maxOtaAppBytes();
+        result.message = planTooLargeMessage(plan.appSize, otaLimit);
         return result;
     }
     if (!sdPath.length()) {

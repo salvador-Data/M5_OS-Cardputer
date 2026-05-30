@@ -59,11 +59,24 @@ def test_explorer_confirm_accepts_keyboard_enter():
 
 def test_keyboard_enter_helpers():
     text = DEVICE_H.read_text(encoding="utf-8")
+    kb = (ROOT / "include" / "m5os_keyboard.h").read_text(encoding="utf-8")
     assert "keyboardEnterJustPressed" in text
     assert "keyboardDrainEnter" in text
     assert "keyboardDrainBack" in text
     assert "keyboardTabJustPressed" in text
     assert "keyboardDrainTab" in text
+    assert "kHidEnter" in kb
+    assert "keysState().enter like WiFi password" in kb
+    enter_fn = kb.split("keyboardEnterJustPressed")[1].split("keyboardEnterHeld")[0]
+    assert "keyboardEnterHeld()" not in enter_fn
+
+
+def test_read_buttons_enter_without_is_pressed():
+    text = DEVICE_H.read_text(encoding="utf-8")
+    fn = text[text.index("inline Buttons readButtons()") : text.index("}  // namespace m5os")]
+    assert "keyboardEnterJustPressed()" in fn
+    assert "if (!M5Cardputer.Keyboard.isChange()) return b;" in fn
+    assert "if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed())" not in fn
 
 
 def test_launch_blocks_spiffs_apps():

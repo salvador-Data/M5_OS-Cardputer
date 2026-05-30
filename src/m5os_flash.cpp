@@ -324,12 +324,15 @@ bool nvsGetFlag(const char* key) {
 
 namespace {
 
-/** Run slot for Load app (app2); legacy 2-slot tables use app1 only. */
+/** Run slot for Load app (app2); legacy 2-slot tables use large app1 only. */
 const esp_partition_t* runSlotPartitionForLimit() {
     const esp_partition_t* app2 =
         esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_2, nullptr);
     if (app2) return app2;
-    return esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
+    const esp_partition_t* app1 =
+        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr);
+    if (app1 && app1->size >= kMinRunSlotPartitionBytes) return app1;
+    return nullptr;
 }
 
 }  // namespace

@@ -21,3 +21,13 @@ def test_config_max_matches_app2_partition():
     assert "0x3C0000" in cfg
     assert "ota_2" in part
     assert "0x70000" in part  # gateway app1 — must not be the load limit
+    assert "kMinRunSlotPartitionBytes" in cfg
+
+
+def test_run_slot_never_falls_back_to_gateway_app1():
+    text = FLASH_CPP.read_text(encoding="utf-8")
+    fn = text[text.index("runSlotPartitionForLimit") : text.index("size_t maxOtaAppBytes")]
+    assert "kMinRunSlotPartitionBytes" in fn
+    gateway = (ROOT / "src" / "m5os_gateway.cpp").read_text(encoding="utf-8")
+    run_fn = gateway[gateway.index("runSlotOtaPartition") : gateway.index("const esp_partition_t* stagingOtaPartition")]
+    assert "kMinRunSlotPartitionBytes" in run_fn

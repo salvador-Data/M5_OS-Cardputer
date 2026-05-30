@@ -43,6 +43,9 @@ def test_gateway_firmware_ui():
     assert "ESC/` = M5 OS" in main
     assert "Enter = launch app" in main
     assert "kMinGatewayUiMs" in main
+    assert "autoLaunchDone" in main
+    assert "m5os_keyboard.h" in main
+    assert "keyboardEnterJustPressed()" in main
     assert "kAutoLaunchMs = 6000" in (ROOT / "include" / "m5os_gateway_shared.h").read_text(encoding="utf-8")
     assert "sess_exit" in main or '"sess_exit"' in main
 

@@ -2,6 +2,7 @@
 
 #include <M5Cardputer.h>
 
+#include "m5os_keyboard.h"
 #include "m5os_watchdog.h"
 #include "power_manager.h"
 
@@ -26,7 +27,6 @@ inline void update() {
     stamp::tick();
 }
 
-
 inline M5GFX& lcd() { return M5Cardputer.Display; }
 
 inline int freeHeap() { return ESP.getFreeHeap(); }
@@ -40,25 +40,6 @@ struct Buttons {
     bool exportKey = false;
 };
 
-constexpr uint8_t kHidEscape = 0x29;
-
-inline bool keyboardBackHeld() {
-    if (!M5Cardputer.Keyboard.isPressed()) return false;
-    const auto status = M5Cardputer.Keyboard.keysState();
-    for (uint8_t hid : status.hid_keys) {
-        if (hid == kHidEscape) return true;
-    }
-    for (auto key : status.word) {
-        if (key == '`' || key == 27) return true;
-    }
-    return false;
-}
-
-inline bool keyboardBackJustPressed() {
-    if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) return false;
-    return keyboardBackHeld();
-}
-
 /** Drop ESC/` held from a prior screen (e.g. main menu back opens switcher). */
 inline void keyboardDrainBack() {
     for (int i = 0; i < 24; ++i) {
@@ -70,27 +51,6 @@ inline void keyboardDrainBack() {
         update();
         delay(10);
     }
-}
-
-inline bool keyboardEnterHeld() {
-    if (!M5Cardputer.Keyboard.isPressed()) return false;
-    const auto status = M5Cardputer.Keyboard.keysState();
-    if (status.enter) return true;
-    for (auto key : status.word) {
-        if (key == '\n' || key == '\r') return true;
-    }
-    return false;
-}
-
-/** Enter confirm — keysState().enter like WiFi password (no isPressed gate). */
-inline bool keyboardEnterJustPressed() {
-    if (!M5Cardputer.Keyboard.isChange()) return false;
-    const auto status = M5Cardputer.Keyboard.keysState();
-    if (status.enter) return true;
-    for (auto key : status.word) {
-        if (key == '\n' || key == '\r') return true;
-    }
-    return false;
 }
 
 /** Drop Enter held from list pick before load confirm. */
@@ -131,16 +91,15 @@ inline void keyboardDrainTab() {
 
 inline Buttons readButtons() {
     Buttons b;
-    if (!M5Cardputer.Keyboard.isChange() || !M5Cardputer.Keyboard.isPressed()) {
-        return b;
-    }
+    if (!M5Cardputer.Keyboard.isChange()) return b;
+    if (keyboardEnterJustPressed()) b.ok = true;
+    if (keyboardBackJustPressed()) b.back = true;
+    if (!M5Cardputer.Keyboard.isPressed()) return b;
     const auto status = M5Cardputer.Keyboard.keysState();
-    if (status.enter || status.space) b.ok = true;
-    if (keyboardBackHeld()) b.back = true;
+    if (status.space) b.ok = true;
     for (auto key : status.word) {
         if (key == ';' || key == 'w' || key == 'W') b.up = true;
         if (key == '.' || key == 's' || key == 'S') b.down = true;
-        if (key == '\n' || key == '\r') b.ok = true;
     }
     return b;
 }
